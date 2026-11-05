@@ -1,7 +1,22 @@
 import { Router } from 'express'
 import type { Response } from 'express'
-import { filterTickets, filterVisibleTickets } from '@vtdesk/domain'
-import type { Department, TicketFilters, TicketPriority, TicketScope, TicketSort, TicketStatus, Viewer } from '@vtdesk/domain'
+import {
+  buildActivityLog,
+  buildTicketTimeline,
+  canViewTicket,
+  filterTickets,
+  filterVisibleTickets,
+  getTicketPermissions,
+} from '@vtdesk/domain'
+import type {
+  Department,
+  TicketFilters,
+  TicketPriority,
+  TicketScope,
+  TicketSort,
+  TicketStatus,
+  Viewer,
+} from '@vtdesk/domain'
 import type { AuthenticatedRequest } from '../middleware/authMiddleware.ts'
 import type { ITicketStore } from '../repositories/interfaces.ts'
 
@@ -71,6 +86,45 @@ export function createTicketRouter(store: ITicketStore, authMiddleware: any): Ro
       res.status(500).json({
         error: 'InternalError',
         message: err.message || 'Unable to retrieve tickets.',
+      })
+    }
+  })
+
+  // Retrieves individual ticket details with timeline, activity log, and viewer permissions
+  router.get('/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const viewer = toDomainViewer(req.viewer)
+      const ticketId = req.params.id
+      const ticket = await store.tickets.findById(ticketId)
+
+      // Return 404 for missing tickets or tickets outside the viewer visibility boundary
+      if (!ticket || !canViewTicket(ticket, viewer)) {
+        res.status(404).json({
+          error: 'NotFound',
+          message: 'The requested ticket does not exist or is not accessible.',
+        })
+        return
+      }
+
+      // Compute pure domain timeline stages
+      const timeline = buildTicketTimeline(ticket)
+
+      // Merge chronological history, comments and assignment log
+      const activityLog = buildActivityLog(ticket)
+
+      // Evaluate role-based action capabilities for current viewer
+      const permissions = getTicketPermissions(ticket, viewer)
+
+      res.status(200).json({
+        ticket,
+        timeline,
+        activityLog,
+        permissions,
+      })
+    } catch (err: any) {
+      res.status(500).json({
+        error: 'InternalError',
+        message: err.message || 'Unable to retrieve ticket details.',
       })
     }
   })
