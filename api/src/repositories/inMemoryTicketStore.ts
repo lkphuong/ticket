@@ -128,6 +128,12 @@ export class InMemoryNotificationRepository implements INotificationRepository {
       .map((n) => ({ ...n }))
   }
 
+  async findByTicketAndType(ticketId: string, type: string): Promise<DbNotification[]> {
+    return Array.from(this.items.values())
+      .filter((n) => n.ticketId === ticketId && n.type === type)
+      .map((n) => ({ ...n }))
+  }
+
   async save(notification: DbNotification): Promise<void> {
     this.items.set(notification.id, { ...notification })
   }
