@@ -2,11 +2,13 @@ import {
   addDays,
   buildComment,
   buildTicket,
+  canCancel,
   canEditDueDate,
   canEditPriority,
   canTransition,
   canViewTicket,
   isActiveTicket,
+  REOPEN_MAX_DAYS,
   STATUS_LABELS,
   validateNewTicket,
 } from '@vtdesk/domain'
@@ -485,5 +487,240 @@ export class TicketService {
 
     await this.store.tickets.save(updatedTicket)
     return { comment, ticket: updatedTicket }
+  }
+
+  // Confirms ticket resolution, stores CSAT rating and transitions ticket to closed
+  async confirmTicket(
+    ticketId: string,
+    rating: number,
+    feedback: string | undefined,
+    creator: TicketCreator,
+  ): Promise<Ticket> {
+    const ticket = await this.store.tickets.findById(ticketId)
+    if (!ticket) {
+      throw new TicketNotFoundError()
+    }
+
+    // 1. Only original requester may confirm resolution
+    if (ticket.requesterName !== creator.name) {
+      throw new TicketAuthorizationError('Chỉ người gửi yêu cầu mới có quyền nghiệm thu.')
+    }
+
+    // 2. Only tickets in resolved status can be confirmed
+    if (ticket.status !== 'resolved') {
+      throw new TicketValidationError('Chỉ nghiệm thu được yêu cầu ở trạng thái "Đã xử lý".', {
+        status: 'Chỉ nghiệm thu được yêu cầu ở trạng thái "Đã xử lý".',
+      })
+    }
+
+    // 3. Validate CSAT rating integer boundaries between 1 and 5
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      throw new TicketValidationError('Điểm đánh giá phải là số nguyên từ 1 đến 5.', {
+        rating: 'Điểm đánh giá phải là số nguyên từ 1 đến 5.',
+      })
+    }
+
+    const now = this.clock()
+    const timestamp = now.toISOString()
+    const actor: TicketActor = { name: creator.name, department: creator.department as Department }
+    const statusHistory = ticket.statusHistory ? [...ticket.statusHistory] : []
+
+    statusHistory.push({
+      status: 'closed',
+      at: timestamp,
+      actor,
+    })
+
+    const updatedTicket: Ticket = {
+      ...ticket,
+      status: 'closed',
+      rating,
+      feedback: feedback?.trim() || undefined,
+      statusHistory,
+      updatedAt: timestamp,
+    }
+
+    await this.store.tickets.save(updatedTicket)
+    return updatedTicket
+  }
+
+  // Returns a resolved ticket back to in_progress for rework while preserving assignee and history
+  async reworkTicket(ticketId: string, reason: string, creator: TicketCreator): Promise<Ticket> {
+    const ticket = await this.store.tickets.findById(ticketId)
+    if (!ticket) {
+      throw new TicketNotFoundError()
+    }
+
+    // 1. Only original requester may request rework
+    if (ticket.requesterName !== creator.name) {
+      throw new TicketAuthorizationError('Chỉ người gửi yêu cầu mới có quyền yêu cầu làm lại.')
+    }
+
+    // 2. Only resolved tickets can be marked for rework
+    if (ticket.status !== 'resolved') {
+      throw new TicketValidationError('Chỉ làm lại được yêu cầu ở trạng thái "Đã xử lý".', {
+        status: 'Chỉ làm lại được yêu cầu ở trạng thái "Đã xử lý".',
+      })
+    }
+
+    const trimmedReason = reason?.trim()
+    if (!trimmedReason) {
+      throw new TicketValidationError('Vui lòng nhập lý do làm lại yêu cầu.', {
+        reason: 'Vui lòng nhập lý do làm lại yêu cầu.',
+      })
+    }
+
+    const now = this.clock()
+    const timestamp = now.toISOString()
+    const actor: TicketActor = { name: creator.name, department: creator.department as Department }
+    const statusHistory = ticket.statusHistory ? [...ticket.statusHistory] : []
+
+    statusHistory.push({
+      status: 'in_progress',
+      at: timestamp,
+      reason: trimmedReason,
+      actor,
+    })
+
+    const updatedTicket: Ticket = {
+      ...ticket,
+      status: 'in_progress',
+      rating: undefined,
+      feedback: undefined,
+      statusHistory,
+      updatedAt: timestamp,
+    }
+
+    await this.store.tickets.save(updatedTicket)
+    return updatedTicket
+  }
+
+  // Reopens a closed ticket within allowable time limit while maintaining assignee and history
+  async reopenTicket(ticketId: string, reason: string, creator: TicketCreator): Promise<Ticket> {
+    const ticket = await this.store.tickets.findById(ticketId)
+    if (!ticket) {
+      throw new TicketNotFoundError()
+    }
+
+    // 1. Only original requester may reopen closed tickets
+    if (ticket.requesterName !== creator.name) {
+      throw new TicketAuthorizationError('Chỉ người gửi yêu cầu mới có quyền mở lại.')
+    }
+
+    // 2. Cancelled tickets can never be reopened
+    if (ticket.cancelReason) {
+      throw new TicketValidationError('Yêu cầu đã bị hủy nên không thể mở lại. Hãy tạo yêu cầu mới.', {
+        status: 'Yêu cầu đã bị hủy nên không thể mở lại.',
+      })
+    }
+
+    // 3. Only normally closed tickets can be reopened
+    if (ticket.status !== 'closed') {
+      throw new TicketValidationError('Chỉ mở lại được yêu cầu ở trạng thái "Đã đóng".', {
+        status: 'Chỉ mở lại được yêu cầu ở trạng thái "Đã đóng".',
+      })
+    }
+
+    const now = this.clock()
+    const timestamp = now.toISOString()
+
+    // 4. Enforce strict calendar window limit
+    const closedEntry = ticket.statusHistory?.findLast((h) => h.status === 'closed')
+    const closedTime = closedEntry ? new Date(closedEntry.at).getTime() : new Date(ticket.updatedAt).getTime()
+    const diffDays = (now.getTime() - closedTime) / (24 * 60 * 60 * 1000)
+
+    if (diffDays > REOPEN_MAX_DAYS) {
+      throw new TicketValidationError(
+        `Đã quá thời hạn ${REOPEN_MAX_DAYS} ngày kể từ lúc đóng yêu cầu, không thể mở lại.`,
+        { status: `Đã quá thời hạn ${REOPEN_MAX_DAYS} ngày kể từ lúc đóng yêu cầu, không thể mở lại.` },
+      )
+    }
+
+    const trimmedReason = reason?.trim()
+    if (!trimmedReason) {
+      throw new TicketValidationError('Vui lòng nhập lý do mở lại yêu cầu.', {
+        reason: 'Vui lòng nhập lý do mở lại yêu cầu.',
+      })
+    }
+
+    const actor: TicketActor = { name: creator.name, department: creator.department as Department }
+    const statusHistory = ticket.statusHistory ? [...ticket.statusHistory] : []
+
+    statusHistory.push({
+      status: 'in_progress',
+      at: timestamp,
+      reason: trimmedReason,
+      actor,
+    })
+
+    const updatedTicket: Ticket = {
+      ...ticket,
+      status: 'in_progress',
+      rating: undefined,
+      feedback: undefined,
+      cancelReason: undefined,
+      statusHistory,
+      updatedAt: timestamp,
+    }
+
+    await this.store.tickets.save(updatedTicket)
+    return updatedTicket
+  }
+
+  // Cancels an active ticket with mandatory cancellation explanation
+  async cancelTicket(ticketId: string, reason: string, creator: TicketCreator): Promise<Ticket> {
+    const ticket = await this.store.tickets.findById(ticketId)
+    if (!ticket) {
+      throw new TicketNotFoundError()
+    }
+
+    const domainViewer: Viewer = {
+      name: creator.name,
+      department: creator.department as Department,
+      isDepartmentHead: creator.isDepartmentHead,
+      isExecutive: creator.role === 'admin',
+    }
+
+    // 1. Only requester or receiving department head can cancel
+    if (!canCancel(ticket, domainViewer)) {
+      throw new TicketAuthorizationError('Bạn không có quyền hủy Ticket này.')
+    }
+
+    // 2. Reject cancellations on inactive tickets
+    if (!isActiveTicket(ticket)) {
+      throw new TicketValidationError('Chỉ hủy được yêu cầu còn hoạt động.', {
+        status: 'Yêu cầu không còn hoạt động.',
+      })
+    }
+
+    const trimmedReason = reason?.trim()
+    if (!trimmedReason) {
+      throw new TicketValidationError('Vui lòng nhập lý do hủy yêu cầu.', {
+        reason: 'Vui lòng nhập lý do hủy yêu cầu.',
+      })
+    }
+
+    const now = this.clock()
+    const timestamp = now.toISOString()
+    const actor: TicketActor = { name: creator.name, department: creator.department as Department }
+    const statusHistory = ticket.statusHistory ? [...ticket.statusHistory] : []
+
+    statusHistory.push({
+      status: 'closed',
+      at: timestamp,
+      reason: trimmedReason,
+      actor,
+    })
+
+    const updatedTicket: Ticket = {
+      ...ticket,
+      status: 'closed',
+      cancelReason: trimmedReason,
+      statusHistory,
+      updatedAt: timestamp,
+    }
+
+    await this.store.tickets.save(updatedTicket)
+    return updatedTicket
   }
 }
