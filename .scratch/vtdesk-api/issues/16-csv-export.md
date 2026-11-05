@@ -4,9 +4,9 @@
 
 **Blocked by:** 06
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Chỉ xuất các Ticket người xem được phép thấy
-- [ ] Kết quả khớp đúng bộ lọc và tìm kiếm đang áp dụng
-- [ ] Tiếng Việt, dấu phẩy, dấu ngoặc kép và xuống dòng trong nội dung được thoát đúng
-- [ ] Có BOM UTF-8 ở đầu tệp
+- [x] Chỉ xuất các Ticket người xem được phép thấy
+- [x] Kết quả khớp đúng bộ lọc và tìm kiếm đang áp dụng
+- [x] Tiếng Việt, dấu phẩy, dấu ngoặc kép và xuống dòng trong nội dung được thoát đúng
+- [x] Có BOM UTF-8 ở đầu tệp
