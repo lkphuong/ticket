@@ -4,10 +4,10 @@
 
 **Blocked by:** 06
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Số liệu bảng điều khiển khớp với danh sách cùng bộ lọc
-- [ ] Trưởng phòng không thấy số liệu phòng khác
-- [ ] Ticket đã đóng xét đúng hạn theo mốc đã chốt và không còn cảnh báo quá hạn
-- [ ] Ticket không đặt hạn hiển thị trung tính, không tính vào tỷ lệ đúng hạn
-- [ ] Nhân viên nhận lỗi từ chối truy cập báo cáo liên phòng ban
+- [x] Số liệu bảng điều khiển khớp với danh sách cùng bộ lọc
+- [x] Trưởng phòng không thấy số liệu phòng khác
+- [x] Ticket đã đóng xét đúng hạn theo mốc đã chốt và không còn cảnh báo quá hạn
+- [x] Ticket không đặt hạn hiển thị trung tính, không tính vào tỷ lệ đúng hạn
+- [x] Nhân viên nhận lỗi từ chối truy cập báo cáo liên phòng ban
