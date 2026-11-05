@@ -54,5 +54,55 @@ export function createNotificationRouter(notificationService: NotificationServic
     }
   })
 
+  // Registers a device push token for the authenticated user
+  router.post('/devices', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { token } = req.body ?? {}
+      if (!token || typeof token !== 'string' || token.trim() === '') {
+        res.status(400).json({
+          error: 'ValidationError',
+          message: 'Device token is required.',
+        })
+        return
+      }
+
+      await notificationService.registerDeviceToken(req.viewer!.username, token.trim())
+      res.status(200).json({
+        status: 'ok',
+        message: 'Device token registered successfully.',
+      })
+    } catch (err: any) {
+      res.status(500).json({
+        error: 'InternalError',
+        message: err.message || 'Unable to register device token.',
+      })
+    }
+  })
+
+  // Unregisters a device push token
+  router.delete('/devices/:token', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const token = req.params.token
+      if (!token || typeof token !== 'string' || token.trim() === '') {
+        res.status(400).json({
+          error: 'ValidationError',
+          message: 'Device token is required.',
+        })
+        return
+      }
+
+      await notificationService.unregisterDeviceToken(token.trim())
+      res.status(200).json({
+        status: 'ok',
+        message: 'Device token unregistered successfully.',
+      })
+    } catch (err: any) {
+      res.status(500).json({
+        error: 'InternalError',
+        message: err.message || 'Unable to unregister device token.',
+      })
+    }
+  })
+
   return router
 }

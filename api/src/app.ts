@@ -14,6 +14,7 @@ import { createHealthRouter } from './routes/health.ts'
 import { createNotificationRouter } from './routes/notificationRoutes.ts'
 import { createTicketRouter } from './routes/ticketRoutes.ts'
 import { NotificationService } from './notifications/notificationService.ts'
+import { FirebasePushGateway, type IPushGateway } from './notifications/pushGateway.ts'
 import { TicketService } from './tickets/ticketService.ts'
 
 export interface AppDependencies {
@@ -21,6 +22,7 @@ export interface AppDependencies {
   readonly sessionService?: ISessionService
   readonly authService?: AuthService
   readonly cmsService?: CmsService
+  readonly pushGateway?: IPushGateway
   readonly notificationService?: NotificationService
   readonly ticketService?: TicketService
 }
@@ -33,7 +35,8 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
   const sessionService = deps.sessionService ?? new MemorySessionService()
   const authService = deps.authService ?? new AuthService(store.members, sessionService)
   const cmsService = deps.cmsService ?? new CmsService(store)
-  const notificationService = deps.notificationService ?? new NotificationService(store)
+  const pushGateway = deps.pushGateway ?? new FirebasePushGateway()
+  const notificationService = deps.notificationService ?? new NotificationService(store, undefined, () => new Date(), pushGateway)
   const ticketService = deps.ticketService ?? new TicketService(store, () => new Date(), notificationService)
   const authMiddleware = createAuthMiddleware(sessionService, store.members)
 

@@ -137,3 +137,11 @@ export const auditLogs = pgTable('audit_logs', {
   details: text('details').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+// Registered device tokens for mobile and web push notifications via Firebase Cloud Messaging
+export const deviceTokens = pgTable('device_tokens', {
+  id: varchar('id', { length: 64 }).primaryKey(),
+  username: varchar('username', { length: 64 }).notNull(),
+  token: text('token').notNull().unique(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})

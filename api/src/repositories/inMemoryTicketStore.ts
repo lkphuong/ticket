@@ -2,11 +2,13 @@ import type { Ticket } from '@vtdesk/domain'
 import type {
   DbAuditLog,
   DbDefaultSla,
+  DbDeviceToken,
   DbMember,
   DbNotification,
   DbRequestTemplate,
   IAuditLogRepository,
   IDepartmentRepository,
+  IDeviceTokenRepository,
   IMemberRepository,
   INotificationRepository,
   ISlaRepository,
@@ -159,6 +161,30 @@ export class InMemoryAuditLogRepository implements IAuditLogRepository {
   }
 }
 
+// In-memory implementation of device token registry
+export class InMemoryDeviceTokenRepository implements IDeviceTokenRepository {
+  private readonly items = new Map<string, DbDeviceToken>()
+
+  async findByUsername(username: string): Promise<DbDeviceToken[]> {
+    const normalized = username.trim().toLowerCase()
+    return Array.from(this.items.values())
+      .filter((t) => t.username.toLowerCase() === normalized)
+      .map((t) => ({ ...t }))
+  }
+
+  async findAll(): Promise<DbDeviceToken[]> {
+    return Array.from(this.items.values()).map((t) => ({ ...t }))
+  }
+
+  async save(deviceToken: DbDeviceToken): Promise<void> {
+    this.items.set(deviceToken.token, { ...deviceToken })
+  }
+
+  async deleteByToken(token: string): Promise<void> {
+    this.items.delete(token)
+  }
+}
+
 // Unified in-memory ticket store
 export class InMemoryTicketStore implements ITicketStore {
   readonly tickets = new InMemoryTicketRepository()
@@ -168,4 +194,5 @@ export class InMemoryTicketStore implements ITicketStore {
   readonly slas = new InMemorySlaRepository()
   readonly notifications = new InMemoryNotificationRepository()
   readonly auditLogs = new InMemoryAuditLogRepository()
+  readonly deviceTokens = new InMemoryDeviceTokenRepository()
 }

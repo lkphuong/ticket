@@ -208,6 +208,21 @@ describe('PostgresTicketStore with real PostgreSQL engine', () => {
     const updatedNotifications = await store.notifications.findByRecipient('minhanh')
     expect(updatedNotifications[0].isRead).toBe(true)
 
+    // 8. Test device tokens repository operations in PostgreSQL
+    await store.deviceTokens.save({
+      id: 'dt-01',
+      username: 'minhanh',
+      token: 'fcm-pg-token-01',
+    })
+
+    const userTokens = await store.deviceTokens.findByUsername('minhanh')
+    expect(userTokens).toHaveLength(1)
+    expect(userTokens[0].token).toBe('fcm-pg-token-01')
+
+    await store.deviceTokens.deleteByToken('fcm-pg-token-01')
+    const afterDeleteTokens = await store.deviceTokens.findByUsername('minhanh')
+    expect(afterDeleteTokens).toHaveLength(0)
+
     await pglite.close()
   })
 })
