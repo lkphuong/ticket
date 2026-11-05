@@ -53,7 +53,7 @@ function matchesScope(ticket: Ticket, scope: TicketScope, viewer: Viewer): boole
 }
 
 function matchesQuery(ticket: Ticket, query: string): boolean {
-  const needle = query.trim().toLowerCase()
+  const needle = query.trim().toLowerCase().normalize('NFC')
   if (!needle) return true
   const fields = [
     ticket.id,
@@ -64,7 +64,7 @@ function matchesQuery(ticket: Ticket, query: string): boolean {
     ticket.fromDepartment,
     ticket.toDepartment,
   ]
-  return fields.some((field) => field.toLowerCase().includes(needle))
+  return fields.some((field) => field.toLowerCase().normalize('NFC').includes(needle))
 }
 
 // Compares the calendar date of creation so the range bounds are inclusive

@@ -4,10 +4,10 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Nhân viên không thấy Ticket không liên quan đến mình
-- [ ] Mỗi phạm vi hộp thư và mỗi bộ lọc có ví dụ test trên dữ liệu mẫu
-- [ ] Tìm toàn văn hỗ trợ tiếng Việt có dấu
-- [ ] Phân trang và sắp xếp ổn định
-- [ ] Kết quả khớp các hàm thuần của gói domain dùng chung
+- [x] Nhân viên không thấy Ticket không liên quan đến mình
+- [x] Mỗi phạm vi hộp thư và mỗi bộ lọc có ví dụ test trên dữ liệu mẫu
+- [x] Tìm toàn văn hỗ trợ tiếng Việt có dấu
+- [x] Phân trang và sắp xếp ổn định
+- [x] Kết quả khớp các hàm thuần của gói domain dùng chung
