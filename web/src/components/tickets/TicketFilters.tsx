@@ -65,7 +65,7 @@ const DUE_OPTIONS: { value: DueFilter; label: string }[] = [
 const ANY_ASSIGNEE_VALUE = ''
 const ASSIGNEE_OPTIONS = [
   { value: ANY_ASSIGNEE_VALUE, label: 'Mọi người xử lý' },
-  ...MEMBERS.filter((member) => !member.isExecutive).map((member) => ({ value: member.name, label: member.name })),
+  ...MEMBERS.filter((member) => !member.isExecutive && member.username !== 'admin').map((member) => ({ value: member.name, label: member.name })),
 ]
 
 const ASSIGNMENT_OPTIONS: { value: AssignmentFilter; label: string }[] = [

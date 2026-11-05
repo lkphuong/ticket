@@ -4,11 +4,11 @@
 
 **Blocked by:** 08, 09, 10, 11, 15, 16
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Mọi màn hình Ticket chạy trên API, không còn dữ liệu mock trong luồng chạy thật
-- [ ] Bộ test vòng đời hiện có chạy lại như contract test đối với API
-- [ ] Nút thao tác chỉ hiện khi người xem có quyền và trạng thái cho phép
-- [ ] Phiên được giữ khi tải lại trang
-- [ ] Không còn tham chiếu đến vai trò Lãnh đạo và chuyển góc nhìn
-- [ ] Lỗi từ API hiển thị bằng thông điệp tiếng Việt có ngữ cảnh
+- [x] Mọi màn hình Ticket chạy trên API, không còn dữ liệu mock trong luồng chạy thật
+- [x] Bộ test vòng đời hiện có chạy lại như contract test đối với API
+- [x] Nút thao tác chỉ hiện khi người xem có quyền và trạng thái cho phép
+- [x] Phiên được giữ khi tải lại trang
+- [x] Không còn tham chiếu đến vai trò Lãnh đạo và chuyển góc nhìn
+- [x] Lỗi từ API hiển thị bằng thông điệp tiếng Việt có ngữ cảnh

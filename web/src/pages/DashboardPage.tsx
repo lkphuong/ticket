@@ -29,7 +29,7 @@ const DEPARTMENT_VIEW_OPTIONS = [
 const ROLE_DESCRIPTIONS = {
   member: 'Hàng đợi các việc chờ bạn xử lý, yêu cầu bạn đã gửi và các nhiệm vụ đang phụ trách.',
   head: 'Điều phối phân công công việc, theo dõi tiến độ phòng ban và kiểm soát hạn chót SLA.',
-  executive: 'Báo cáo tổng quan khối lượng công việc, tỷ lệ hoàn thành đúng hạn và phân bổ giữa các phòng ban.',
+  admin: 'Báo cáo tổng quan khối lượng công việc, tỷ lệ hoàn thành đúng hạn và phân bổ giữa các phòng ban.',
 } as const
 
 export function DashboardPage() {
@@ -37,13 +37,13 @@ export function DashboardPage() {
   const [now] = useState(() => new Date())
   const [departmentView, setDepartmentView] = useState<Department | typeof ALL_DEPARTMENTS_VALUE>(ALL_DEPARTMENTS_VALUE)
   const role = getViewerRole(viewer)
-  // Only executives may look through another department's eyes; everyone else keeps their own scope
-  const tickets = role === 'executive' ? filterByDepartmentView(visibleTickets, departmentView) : visibleTickets
+  // Administrators inspect company-wide metrics through optional department views
+  const tickets = role === 'admin' ? filterByDepartmentView(visibleTickets, departmentView) : visibleTickets
   const inbox = buildInbox(tickets, viewer)
   const activeTickets = tickets.filter(isActiveTicket)
   const departmentQueue = tickets.filter((ticket) => isActiveTicket(ticket) && ticket.toDepartment === viewer.department)
   const departmentTickets = tickets.filter((ticket) => ticket.toDepartment === viewer.department)
-  // Heads inspect department scope; executives oversee enterprise-wide activities
+  // Heads inspect department scope; administrators oversee enterprise-wide activities
   const overdueScope = role === 'head' ? departmentTickets : tickets
   const overdueTickets = overdueScope.filter((ticket) => isTicketOverdue(ticket, now))
   const workload = workloadByDepartment(tickets)
@@ -125,9 +125,11 @@ export function DashboardPage() {
         title="Tổng quan"
         description={ROLE_DESCRIPTIONS[role]}
         action={
-          <Link to="/tickets/new">
-            <Button>Tạo yêu cầu</Button>
-          </Link>
+          role !== 'admin' ? (
+            <Link to="/tickets/new">
+              <Button>Tạo yêu cầu</Button>
+            </Link>
+          ) : undefined
         }
       />
 
@@ -137,7 +139,7 @@ export function DashboardPage() {
         ))}
       </dl>
 
-      {role === 'executive' && (
+      {role === 'admin' && (
         <div className="mb-6 flex flex-col gap-2">
           <label htmlFor="department-view" className="text-xs font-bold text-ink uppercase tracking-wider">
             Góc nhìn phòng ban (chỉ xem)
@@ -152,7 +154,7 @@ export function DashboardPage() {
           </div>
         </div>
       )}
-      {role === 'executive' && (
+      {role === 'admin' && (
         <div className="mb-6">
           <StatusBreakdown title="Phân bổ theo trạng thái" tickets={tickets} />
         </div>
@@ -179,7 +181,7 @@ export function DashboardPage() {
             </div>
           </>
         )}
-        {role === 'executive' && (
+        {role === 'admin' && (
           <>
             {workloadPanel}
             {overduePanel}

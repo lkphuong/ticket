@@ -4,12 +4,10 @@ import { Button } from '../components/ui/Button.tsx'
 import { CONTROL_CLASS } from '../components/ui/controlStyles.ts'
 import { FormField } from '../components/ui/FormField.tsx'
 import { ThemeToggle } from '../components/ui/ThemeToggle.tsx'
-import { MEMBERS } from '../data/members.ts'
 import { MOCK_PASSWORD } from '../lib/auth.ts'
-import { ROLE_LABELS, getViewerRole } from '../lib/viewerRole.ts'
 import { useAuth } from '../state/useAuth.ts'
 
-const INVALID_CREDENTIALS_MESSAGE = 'Tên đăng nhập hoặc mật khẩu không đúng.'
+const INVALID_CREDENTIALS_MESSAGE = 'Tên đăng nhập hoặc mật khẩu không chính xác.'
 
 interface QuickLoginProfile {
   username: string
@@ -42,11 +40,11 @@ const QUICK_PROFILES: readonly QuickLoginProfile[] = [
     description: 'Tiếp nhận công việc được phân công, cập nhật tiến trình kỹ thuật',
   },
   {
-    username: 'haidang',
-    name: 'Nguyễn Hải Đăng',
-    roleLabel: 'Lãnh đạo điều hành',
-    department: 'Hành chính',
-    description: 'Giám sát khối lượng liên phòng ban và hiệu suất SLA toàn doanh nghiệp',
+    username: 'admin',
+    name: 'Quản trị viên Hệ thống',
+    roleLabel: 'Quản trị viên',
+    department: 'Công nghệ thông tin',
+    description: 'Giám sát toàn bộ yêu cầu, kiểm tra báo cáo liên phòng ban và quản trị hệ thống',
   },
 ]
 
@@ -55,15 +53,32 @@ export function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const succeeded = login(username, password)
-    setError(succeeded ? '' : INVALID_CREDENTIALS_MESSAGE)
+    setError('')
+    setIsSubmitting(true)
+
+    try {
+      await login(username, password)
+    } catch (err: any) {
+      setError(err.message || INVALID_CREDENTIALS_MESSAGE)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  function handleQuickLogin(targetUsername: string) {
-    login(targetUsername, MOCK_PASSWORD)
+  async function handleQuickLogin(targetUsername: string) {
+    setError('')
+    setIsSubmitting(true)
+    try {
+      await login(targetUsername, MOCK_PASSWORD)
+    } catch (err: any) {
+      setError(err.message || INVALID_CREDENTIALS_MESSAGE)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -100,90 +115,69 @@ export function LoginPage() {
             Chọn tài khoản mẫu để trải nghiệm các góc nhìn nghiệp vụ tương ứng:
           </p>
         </div>
-        <div className="grid gap-2.5 sm:grid-cols-2">
+        <div className="grid gap-2">
           {QUICK_PROFILES.map((profile) => (
             <button
               key={profile.username}
               type="button"
+              disabled={isSubmitting}
               onClick={() => handleQuickLogin(profile.username)}
-              className="group flex flex-col items-start rounded-md border border-line bg-canvas p-3 text-left transition-all hover:border-accent-600 hover:bg-surface hover:shadow-sm"
+              className="flex items-center justify-between rounded-md border border-line bg-canvas p-3 text-left transition-colors hover:border-accent-600 hover:bg-surface focus:border-accent-600 focus:outline-none disabled:opacity-50"
             >
-              <div className="flex w-full items-center justify-between">
-                <span className="text-xs font-bold text-ink group-hover:text-accent-600">{profile.name}</span>
-                <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-surface border border-line text-ink-muted">
-                  {profile.roleLabel}
-                </span>
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-ink">{profile.name}</span>
+                  <span className="rounded bg-line px-1.5 py-0.5 text-[11px] font-medium text-ink-muted">
+                    {profile.roleLabel}
+                  </span>
+                  <span className="text-xs text-ink-muted">· {profile.department}</span>
+                </div>
+                <span className="text-xs text-ink-muted">{profile.description}</span>
               </div>
-              <span className="mt-1 text-[11px] font-medium text-ink-muted">{profile.department}</span>
-              <p className="mt-1 text-[10px] leading-tight text-ink-muted/80">{profile.description}</p>
+              <span className="text-xs font-semibold text-accent-600">Chọn</span>
             </button>
           ))}
         </div>
       </section>
 
-      <section aria-labelledby="manual-login-title" className="rounded-lg border border-line bg-surface shadow-lift">
-        <h2 id="manual-login-title" className="border-b border-line px-5 py-3 text-sm font-bold text-ink">
-          Xác thực thủ công
-        </h2>
-        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 px-5 py-5">
-          <FormField id="login-username" label="Tên đăng nhập">
-            <input
-              id="login-username"
-              type="text"
-              autoComplete="username"
-              autoCapitalize="none"
-              required
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              aria-invalid={error ? true : undefined}
-              aria-describedby={error ? 'login-error' : undefined}
-              placeholder="Ví dụ: minhanh, quocbao, giahuy..."
-              className={CONTROL_CLASS}
-            />
-          </FormField>
-          <FormField id="login-password" label="Mật khẩu" hint={`Mật khẩu hệ thống thử nghiệm: ${MOCK_PASSWORD}`}>
-            <input
-              id="login-password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              aria-invalid={error ? true : undefined}
-              aria-describedby={error ? 'login-error' : undefined}
-              className={CONTROL_CLASS}
-            />
-          </FormField>
-          {error && (
-            <p id="login-error" role="alert" className="text-xs font-semibold text-brick-700">
-              {error}
-            </p>
-          )}
-          <Button type="submit" disabled={!username.trim() || !password}>
-            Xác thực tài khoản
-          </Button>
-        </form>
-      </section>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-lg border border-line bg-surface p-6 shadow-lift">
+        <h2 className="text-sm font-bold text-ink">Hoặc đăng nhập bằng tài khoản</h2>
 
-      <section aria-label="Danh mục tài khoản hệ thống" className="rounded-lg border border-line bg-surface px-5 py-3 text-xs text-ink-muted">
-        <details>
-          <summary className="cursor-pointer font-semibold text-ink hover:text-accent-600">
-            Xem toàn bộ danh bạ tài khoản mẫu ({MEMBERS.length} nhân sự)
-          </summary>
-          <ul className="mt-2.5 max-h-48 divide-y divide-line overflow-y-auto pr-1">
-            {MEMBERS.map((member) => (
-              <li key={member.username} className="flex items-center justify-between py-1.5 text-[11px]">
-                <span>
-                  <strong className="text-ink">{member.username}</strong> · {member.name}
-                </span>
-                <span>
-                  {ROLE_LABELS[getViewerRole(member)]} · {member.department}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      </section>
+        {error && (
+          <div role="alert" className="rounded-md border border-brick-500/30 bg-brick-100/30 p-3 text-xs text-brick-700">
+            {error}
+          </div>
+        )}
+
+        <FormField id="username" label="Tên đăng nhập">
+          <input
+            id="username"
+            type="text"
+            required
+            autoComplete="username"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder="minhanh, quocbao, giahuy, admin..."
+            className={CONTROL_CLASS}
+          />
+        </FormField>
+
+        <FormField id="password" label="Mật khẩu">
+          <input
+            id="password"
+            type="password"
+            required
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            className={CONTROL_CLASS}
+          />
+        </FormField>
+
+        <Button type="submit" className="w-full justify-center" disabled={isSubmitting}>
+          {isSubmitting ? 'Đang xác thực...' : 'Đăng nhập vào hệ thống'}
+        </Button>
+      </form>
     </main>
   )
 }

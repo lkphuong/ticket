@@ -16,7 +16,7 @@ import { useTickets } from '../state/useTickets.ts'
 const LIST_DESCRIPTIONS = {
   member: 'Hàng đợi các yêu cầu bạn đã gửi hoặc được phân công xử lý, sắp xếp theo thời gian cập nhật.',
   head: 'Toàn bộ yêu cầu gửi đi và tiếp nhận của phòng ban, bao gồm trạng thái phân công và hạn chót SLA.',
-  executive: 'Hệ thống điều phối liên phòng ban toàn diện, giám sát tiến độ thực hiện và xử lý quá hạn.',
+  admin: 'Hệ thống điều phối liên phòng ban toàn diện, giám sát tiến độ thực hiện và quản trị hệ thống.',
 } as const
 
 export function TicketListPage() {
@@ -51,15 +51,19 @@ export function TicketListPage() {
     notify(`Đã xuất báo cáo ${visible.length} yêu cầu thành công`, 'success')
   }
 
+  const role = getViewerRole(viewer)
+
   return (
     <>
       <PageHeader
         title="Yêu cầu hỗ trợ"
-        description={LIST_DESCRIPTIONS[getViewerRole(viewer)]}
+        description={LIST_DESCRIPTIONS[role]}
         action={
-          <Link to="/tickets/new">
-            <Button>Tạo yêu cầu</Button>
-          </Link>
+          role !== 'admin' ? (
+            <Link to="/tickets/new">
+              <Button>Tạo yêu cầu</Button>
+            </Link>
+          ) : undefined
         }
       />
       <div className="mb-4">

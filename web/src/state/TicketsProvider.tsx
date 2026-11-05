@@ -1,11 +1,9 @@
-import { useCallback, useContext, useMemo } from 'react'
+// High performance tickets store provider backed by the REST API
+
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { NewTicketInput, TicketActor, TicketAttachment, TicketPriority, TicketStatus, Viewer } from '../domain/ticket.ts'
-import { filterVisibleTickets } from '../lib/ticketVisibility.ts'
-import { buildComment, buildTicket } from './ticketFactory.ts'
-import { validateTicketAction } from './ticketsReducer.ts'
-import type { TicketsAction } from './ticketsReducer.ts'
-import { TicketStoreContext } from './ticketStoreContext.ts'
+import type { NewTicketInput, Ticket, TicketAttachment, TicketPriority, TicketStatus, Viewer } from '../domain/ticket.ts'
+import { ApiError, apiClient } from '../lib/apiClient.ts'
 import { TicketsContext } from './ticketsContext.ts'
 import type { TicketsContextValue } from './ticketsContext.ts'
 
@@ -14,94 +12,168 @@ interface TicketsProviderProps {
   children: ReactNode
 }
 
-// Scopes the shared store to what the signed-in viewer is allowed to see
 export function TicketsProvider({ viewer, children }: TicketsProviderProps) {
-  const store = useContext(TicketStoreContext)
-  if (!store) throw new Error('TicketsProvider must be used inside TicketStoreProvider')
-  const { allTickets, dispatch } = store
-  const actor = useMemo<TicketActor>(() => ({ name: viewer.name, department: viewer.department }), [viewer])
+  const [tickets, setTickets] = useState<Ticket[]>([])
+  const [isLoading, setIsLoading] = useState<boolean>(true)
 
-  const tickets = useMemo(() => filterVisibleTickets(allTickets, viewer), [allTickets, viewer])
+  // Synchronizes tickets from the API conforming to viewer role boundaries
+  const refreshTickets = useCallback(async () => {
+    try {
+      const res = await apiClient.tickets.list({ limit: 1000 })
+      setTickets(res.tickets)
+    } catch {
+      // Maintain existing cached tickets on transient network hiccups
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
 
-  // Applies the action unless the lifecycle rules refuse it, returning the Vietnamese refusal reason
-  const submit = useCallback(
-    (action: TicketsAction): string | null => {
-      const error = validateTicketAction(allTickets, action)
-      if (error === null) dispatch(action)
-      return error
-    },
-    [allTickets, dispatch],
-  )
+  useEffect(() => {
+    let ignore = false
+    apiClient.tickets
+      .list({ limit: 1000 })
+      .then((res) => {
+        if (!ignore) {
+          setTickets(res.tickets)
+          setIsLoading(false)
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [viewer])
 
   const createTicket = useCallback(
-    (input: NewTicketInput) => {
-      const ticket = buildTicket(input, viewer, allTickets, new Date())
-      dispatch({ type: 'ticket_created', ticket })
-      return ticket
+    async (input: NewTicketInput): Promise<Ticket> => {
+      const res = await apiClient.tickets.create(input)
+      setTickets((prev) => [res.ticket, ...prev.filter((t) => t.id !== res.ticket.id)])
+      return res.ticket
     },
-    [allTickets, viewer, dispatch],
+    [],
   )
 
   const changeStatus = useCallback(
-    (ticketId: string, status: TicketStatus) => {
-      return submit({ type: 'status_changed', ticketId, status, changedAt: new Date().toISOString(), actor })
+    async (ticketId: string, status: TicketStatus, reason?: string): Promise<string | null> => {
+      try {
+        const res = await apiClient.tickets.updateStatus(ticketId, status, reason)
+        setTickets((prev) => prev.map((t) => (t.id === ticketId ? res.ticket : t)))
+        return null
+      } catch (err: any) {
+        return err instanceof ApiError ? err.message : 'Không thể cập nhật tiến trình.'
+      }
     },
-    [submit, actor],
+    [],
   )
 
   const assignTicket = useCallback(
-    (ticketId: string, assigneeName: string) => {
-      return submit({ type: 'assignee_set', ticketId, assigneeName, changedAt: new Date().toISOString(), actor })
+    async (ticketId: string, assigneeName: string): Promise<string | null> => {
+      try {
+        const res = await apiClient.tickets.assign(ticketId, assigneeName)
+        setTickets((prev) => prev.map((t) => (t.id === ticketId ? res.ticket : t)))
+        return null
+      } catch (err: any) {
+        return err instanceof ApiError ? err.message : 'Không thể phân công yêu cầu.'
+      }
     },
-    [submit, actor],
+    [],
   )
 
   const confirmResult = useCallback(
-    (ticketId: string, rating: number, feedback?: string) => {
-      return submit({ type: 'result_confirmed', ticketId, rating, feedback, changedAt: new Date().toISOString(), actor })
+    async (ticketId: string, rating: number, feedback?: string): Promise<string | null> => {
+      try {
+        const res = await apiClient.tickets.confirm(ticketId, rating, feedback)
+        setTickets((prev) => prev.map((t) => (t.id === ticketId ? res.ticket : t)))
+        return null
+      } catch (err: any) {
+        return err instanceof ApiError ? err.message : 'Không thể nghiệm thu kết quả.'
+      }
     },
-    [submit, actor],
+    [],
   )
 
   const addComment = useCallback(
-    (ticketId: string, body: string, attachments: TicketAttachment[] = []) => {
-      const comment = buildComment(body, viewer.name, viewer.department, new Date(), attachments)
-      return submit({ type: 'comment_added', ticketId, comment })
+    async (ticketId: string, body: string, attachments?: TicketAttachment[]): Promise<string | null> => {
+      try {
+        const res = await apiClient.tickets.addComment(ticketId, body, attachments)
+        setTickets((prev) => prev.map((t) => (t.id === ticketId ? res.ticket : t)))
+        return null
+      } catch (err: any) {
+        return err instanceof ApiError ? err.message : 'Không thể gửi bình luận.'
+      }
     },
-    [viewer, submit],
+    [],
   )
 
   const changePriority = useCallback(
-    (ticketId: string, priority: TicketPriority) => {
-      return submit({ type: 'priority_changed', ticketId, priority, changedAt: new Date().toISOString() })
+    async (ticketId: string, priority: TicketPriority): Promise<string | null> => {
+      try {
+        const res = await apiClient.tickets.updatePriority(ticketId, priority)
+        setTickets((prev) => prev.map((t) => (t.id === ticketId ? res.ticket : t)))
+        return null
+      } catch (err: any) {
+        return err instanceof ApiError ? err.message : 'Không thể thay đổi mức ưu tiên.'
+      }
     },
-    [submit],
+    [],
   )
 
   const changeDueDate = useCallback(
-    (ticketId: string, dueDate: string) => {
-      return submit({ type: 'due_date_changed', ticketId, dueDate, changedAt: new Date().toISOString() })
+    async (ticketId: string, dueDate: string): Promise<string | null> => {
+      try {
+        const res = await apiClient.tickets.updateDueDate(ticketId, dueDate)
+        setTickets((prev) => prev.map((t) => (t.id === ticketId ? res.ticket : t)))
+        return null
+      } catch (err: any) {
+        return err instanceof ApiError ? err.message : 'Không thể thay đổi hạn chót.'
+      }
     },
-    [submit],
+    [],
   )
 
   const cancelTicket = useCallback(
-    (ticketId: string, reason: string) => {
-      return submit({ type: 'ticket_cancelled', ticketId, reason, changedAt: new Date().toISOString(), actor })
+    async (ticketId: string, reason: string): Promise<string | null> => {
+      try {
+        const res = await apiClient.tickets.cancel(ticketId, reason)
+        setTickets((prev) => prev.map((t) => (t.id === ticketId ? res.ticket : t)))
+        return null
+      } catch (err: any) {
+        return err instanceof ApiError ? err.message : 'Không thể hủy yêu cầu.'
+      }
     },
-    [submit, actor],
+    [],
   )
 
   const reopenTicket = useCallback(
-    (ticketId: string, reason: string) =>
-      submit({ type: 'ticket_reopened', ticketId, reason, changedAt: new Date().toISOString(), actor }),
-    [submit, actor],
+    async (ticketId: string, reason: string): Promise<string | null> => {
+      try {
+        const current = tickets.find((t) => t.id === ticketId)
+        // Resolves rework vs reopening of permanently closed ticket
+        const res =
+          current?.status === 'resolved'
+            ? await apiClient.tickets.rework(ticketId, reason)
+            : await apiClient.tickets.reopen(ticketId, reason)
+
+        setTickets((prev) => prev.map((t) => (t.id === ticketId ? res.ticket : t)))
+        return null
+      } catch (err: any) {
+        return err instanceof ApiError ? err.message : 'Không thể mở lại yêu cầu.'
+      }
+    },
+    [tickets],
   )
 
   const value = useMemo<TicketsContextValue>(
     () => ({
       tickets,
       viewer,
+      isLoading,
+      refreshTickets,
       createTicket,
       changeStatus,
       assignTicket,
@@ -115,6 +187,8 @@ export function TicketsProvider({ viewer, children }: TicketsProviderProps) {
     [
       tickets,
       viewer,
+      isLoading,
+      refreshTickets,
       createTicket,
       changeStatus,
       assignTicket,

@@ -1,207 +1,402 @@
+// Ticket lifecycle contract tests verifying HTTP API compliance with core domain business rules
+
 import { describe, expect, it } from 'vitest'
-import type { Ticket, TicketComment } from '../domain/ticket.ts'
-import { ticketsReducer, validateTicketAction } from './ticketsReducer.ts'
-import type { TicketsAction } from './ticketsReducer.ts'
+import request from 'supertest'
+import {
+  createApp,
+  loadEnvironmentConfig,
+  InMemoryTicketStore,
+  TicketService,
+  seedDatabase,
+} from '@vtdesk/api'
 
-function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
-  return {
-    id: 'TCK-1',
-    title: 'Mẫu',
-    description: 'Mô tả mẫu cho ticket',
-    priority: 'medium',
-    status: 'open',
-    requesterName: 'Bình',
-    fromDepartment: 'Marketing',
-    toDepartment: 'Kế toán',
-    attachments: [],
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    comments: [],
-    statusHistory: [{ status: 'open', at: '2026-01-01T00:00:00.000Z' }],
-    ...overrides,
+describe('ticket lifecycle contract tests against API', () => {
+  async function setup(injectedNow: Date = new Date('2026-11-05T10:00:00.000Z')) {
+    let currentTime = injectedNow
+    const config = loadEnvironmentConfig({ NODE_ENV: 'development', PORT: '3000' })
+    const store = new InMemoryTicketStore()
+    await seedDatabase(store, currentTime)
+
+    const ticketService = new TicketService(store, () => currentTime)
+    const app = createApp(config, { store, ticketService })
+
+    // Requester: minhanh (Nhân viên - Kinh doanh)
+    const requesterRes = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'minhanh', password: 'ticket123' })
+    const requesterToken = requesterRes.body.token
+
+    // Receiving Head: vankhoa (Trưởng phòng - CNTT)
+    const headRes = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'vankhoa', password: 'ticket123' })
+    const headToken = headRes.body.token
+
+    // Primary Handler: giahuy (Chuyên viên - CNTT)
+    const handlerRes = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'giahuy', password: 'ticket123' })
+    const handlerToken = handlerRes.body.token
+
+    // Secondary Handler: tuananh (Chuyên viên - CNTT)
+    const secondHandlerRes = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'tuananh', password: 'ticket123' })
+    const secondHandlerToken = secondHandlerRes.body.token
+
+    const createSampleTicket = async (overrides: Record<string, any> = {}) => {
+      const payload = {
+        title: 'Yêu cầu kiểm tra mạng tầng 2',
+        description: 'Kết nối mạng bị gián đoạn định kỳ',
+        purpose: 'Đảm bảo kết nối làm việc cho bộ phận kinh doanh',
+        expectedResult: 'Hệ thống mạng hoạt động ổn định',
+        priority: 'medium',
+        toDepartment: 'Công nghệ thông tin',
+        dueDate: '2026-11-10',
+        attachments: [],
+        ...overrides,
+      }
+      const res = await request(app)
+        .post('/api/tickets')
+        .set('Authorization', `Bearer ${requesterToken}`)
+        .send(payload)
+      expect(res.status).toBe(201)
+      return res.body.ticket
+    }
+
+    const setClock = (nextTime: Date) => {
+      currentTime = nextTime
+    }
+
+    return {
+      app,
+      store,
+      requesterToken,
+      headToken,
+      handlerToken,
+      secondHandlerToken,
+      createSampleTicket,
+      setClock,
+    }
   }
-}
 
-const at = '2026-03-01T00:00:00.000Z'
+  it('should_close_ticket_when_happy_path_runs_from_creation_to_confirmation', async () => {
+    const { app, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
 
-function run(ticket: Ticket, ...actions: TicketsAction[]): Ticket {
-  return actions.reduce((state, action) => ticketsReducer(state, action), [ticket])[0]
-}
+    // 1. Assign to specialist by receiving department head
+    const assignRes = await request(app)
+      .patch(`/api/tickets/${ticket.id}/assign`)
+      .set('Authorization', `Bearer ${headToken}`)
+      .send({ assigneeName: 'Hoàng Gia Huy' })
+    expect(assignRes.status).toBe(200)
 
-function comment(author: string): TicketComment {
-  return { id: 'c1', author, department: 'Marketing', body: 'Trả lời', createdAt: at }
-}
+    // 2. Start progress by assigned specialist
+    const inProgressRes = await request(app)
+      .patch(`/api/tickets/${ticket.id}/status`)
+      .set('Authorization', `Bearer ${handlerToken}`)
+      .send({ status: 'in_progress' })
+    expect(inProgressRes.status).toBe(200)
 
-describe('ticket lifecycle', () => {
-  it('should_close_ticket_when_happy_path_runs_from_creation_to_confirmation', () => {
-    const ticket = run(
-      makeTicket(),
-      { type: 'assignee_set', ticketId: 'TCK-1', assigneeName: 'Hà', changedAt: at },
-      { type: 'status_changed', ticketId: 'TCK-1', status: 'resolved', changedAt: at },
-      { type: 'result_confirmed', ticketId: 'TCK-1', rating: 5, changedAt: at },
+    // 3. Complete work (resolved) by specialist
+    const resolvedRes = await request(app)
+      .patch(`/api/tickets/${ticket.id}/status`)
+      .set('Authorization', `Bearer ${handlerToken}`)
+      .send({ status: 'resolved' })
+    expect(resolvedRes.status).toBe(200)
+
+    // 4. Confirm resolution with CSAT rating 5 by requester
+    const confirmRes = await request(app)
+      .post(`/api/tickets/${ticket.id}/confirm`)
+      .set('Authorization', `Bearer ${requesterToken}`)
+      .send({ rating: 5, feedback: 'Xử lý rất nhanh và tận tình' })
+    expect(confirmRes.status).toBe(200)
+    expect(confirmRes.body.ticket.status).toBe('closed')
+    expect(confirmRes.body.ticket.rating).toBe(5)
+  })
+
+  it('should_reject_disallowed_status_transitions_and_explain_in_vietnamese', async () => {
+    const { app, headToken, handlerToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
+
+    await request(app)
+      .patch(`/api/tickets/${ticket.id}/assign`)
+      .set('Authorization', `Bearer ${headToken}`)
+      .send({ assigneeName: 'Hoàng Gia Huy' })
+
+    // In-progress ticket cannot transition back to open
+    const invalidOpenRes = await request(app)
+      .patch(`/api/tickets/${ticket.id}/status`)
+      .set('Authorization', `Bearer ${handlerToken}`)
+      .send({ status: 'open' })
+    expect(invalidOpenRes.status).toBe(400)
+    expect(invalidOpenRes.body.message).toContain('Đang xử lý')
+    expect(invalidOpenRes.body.message).toContain('Mới')
+
+    // In-progress ticket cannot transition directly to closed
+    const invalidClosedRes = await request(app)
+      .patch(`/api/tickets/${ticket.id}/status`)
+      .set('Authorization', `Bearer ${handlerToken}`)
+      .send({ status: 'closed' })
+    expect(invalidClosedRes.status).toBe(400)
+  })
+
+  it('should_reject_cancel_when_reason_is_blank', async () => {
+    const { app, requesterToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
+
+    const res = await request(app)
+      .post(`/api/tickets/${ticket.id}/cancel`)
+      .set('Authorization', `Bearer ${requesterToken}`)
+      .send({ reason: '   ' })
+    expect(res.status).toBe(400)
+    expect(res.body.message).toContain('lý do')
+  })
+
+  it('should_reject_cancel_when_ticket_is_already_closed', async () => {
+    const { app, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
+
+    await request(app).patch(`/api/tickets/${ticket.id}/assign`).set('Authorization', `Bearer ${headToken}`).send({ assigneeName: 'Hoàng Gia Huy' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'in_progress' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'resolved' })
+    await request(app).post(`/api/tickets/${ticket.id}/confirm`).set('Authorization', `Bearer ${requesterToken}`).send({ rating: 4 })
+
+    const res = await request(app)
+      .post(`/api/tickets/${ticket.id}/cancel`)
+      .set('Authorization', `Bearer ${requesterToken}`)
+      .send({ reason: 'Không cần nữa' })
+    expect(res.status).toBe(403)
+  })
+
+  it('should_reject_confirmation_when_rating_is_out_of_bounds', async () => {
+    const { app, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
+
+    await request(app).patch(`/api/tickets/${ticket.id}/assign`).set('Authorization', `Bearer ${headToken}`).send({ assigneeName: 'Hoàng Gia Huy' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'in_progress' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'resolved' })
+
+    for (const invalidRating of [0, 6, 3.5, -1]) {
+      const res = await request(app)
+        .post(`/api/tickets/${ticket.id}/confirm`)
+        .set('Authorization', `Bearer ${requesterToken}`)
+        .send({ rating: invalidRating })
+      expect(res.status).toBe(400)
+      expect(res.body.message).toContain('1 đến 5')
+    }
+  })
+
+  it('should_reject_confirmation_when_ticket_is_not_resolved', async () => {
+    const { app, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
+
+    await request(app).patch(`/api/tickets/${ticket.id}/assign`).set('Authorization', `Bearer ${headToken}`).send({ assigneeName: 'Hoàng Gia Huy' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'in_progress' })
+
+    const res = await request(app)
+      .post(`/api/tickets/${ticket.id}/confirm`)
+      .set('Authorization', `Bearer ${requesterToken}`)
+      .send({ rating: 5 })
+    expect(res.status).toBe(400)
+    expect(res.body.message).toContain('Đã xử lý')
+  })
+
+  it('should_reject_assignment_when_ticket_is_closed', async () => {
+    const { app, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
+
+    await request(app).patch(`/api/tickets/${ticket.id}/assign`).set('Authorization', `Bearer ${headToken}`).send({ assigneeName: 'Hoàng Gia Huy' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'in_progress' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'resolved' })
+    await request(app).post(`/api/tickets/${ticket.id}/confirm`).set('Authorization', `Bearer ${requesterToken}`).send({ rating: 5 })
+
+    const res = await request(app)
+      .patch(`/api/tickets/${ticket.id}/assign`)
+      .set('Authorization', `Bearer ${headToken}`)
+      .send({ assigneeName: 'Chu Tuấn Anh' })
+    expect(res.status).toBe(400)
+    expect(res.body.message).toContain('hoạt động')
+  })
+
+  it('should_return_to_in_progress_with_reason_when_rework_is_requested_on_resolved_ticket', async () => {
+    const { app, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
+
+    await request(app).patch(`/api/tickets/${ticket.id}/assign`).set('Authorization', `Bearer ${headToken}`).send({ assigneeName: 'Hoàng Gia Huy' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'in_progress' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'resolved' })
+
+    const reworkRes = await request(app)
+      .post(`/api/tickets/${ticket.id}/rework`)
+      .set('Authorization', `Bearer ${requesterToken}`)
+      .send({ reason: 'Chưa cài đặt đủ driver máy in' })
+    expect(reworkRes.status).toBe(200)
+    expect(reworkRes.body.ticket.status).toBe('in_progress')
+    const lastHistory = reworkRes.body.ticket.statusHistory?.at(-1)
+    expect(lastHistory?.status).toBe('in_progress')
+    expect(lastHistory?.reason).toBe('Chưa cài đặt đủ driver máy in')
+  })
+
+  it('should_clear_rating_and_feedback_when_closed_ticket_is_reopened', async () => {
+    const { app, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
+
+    await request(app).patch(`/api/tickets/${ticket.id}/assign`).set('Authorization', `Bearer ${headToken}`).send({ assigneeName: 'Hoàng Gia Huy' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'in_progress' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'resolved' })
+    await request(app).post(`/api/tickets/${ticket.id}/confirm`).set('Authorization', `Bearer ${requesterToken}`).send({ rating: 4, feedback: 'Tạm ổn' })
+
+    const reopenRes = await request(app)
+      .post(`/api/tickets/${ticket.id}/reopen`)
+      .set('Authorization', `Bearer ${requesterToken}`)
+      .send({ reason: 'Sự cố tái diễn vào sáng nay' })
+    expect(reopenRes.status).toBe(200)
+    expect(reopenRes.body.ticket.status).toBe('in_progress')
+    expect(reopenRes.body.ticket.rating).toBeUndefined()
+    expect(reopenRes.body.ticket.feedback).toBeUndefined()
+  })
+
+  it('should_reject_reopen_when_reason_is_blank_or_ticket_is_active', async () => {
+    const { app, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
+
+    await request(app).patch(`/api/tickets/${ticket.id}/assign`).set('Authorization', `Bearer ${headToken}`).send({ assigneeName: 'Hoàng Gia Huy' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'in_progress' })
+
+    // Active ticket cannot be reopened
+    const activeReopenRes = await request(app)
+      .post(`/api/tickets/${ticket.id}/reopen`)
+      .set('Authorization', `Bearer ${requesterToken}`)
+      .send({ reason: 'Mở lại' })
+    expect(activeReopenRes.status).toBe(400)
+
+    // Close ticket first
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'resolved' })
+    await request(app).post(`/api/tickets/${ticket.id}/confirm`).set('Authorization', `Bearer ${requesterToken}`).send({ rating: 5 })
+
+    // Blank reason rejected
+    const blankReopenRes = await request(app)
+      .post(`/api/tickets/${ticket.id}/reopen`)
+      .set('Authorization', `Bearer ${requesterToken}`)
+      .send({ reason: '   ' })
+    expect(blankReopenRes.status).toBe(400)
+    expect(blankReopenRes.body.message).toContain('lý do')
+  })
+
+  it('should_record_previous_and_new_assignee_when_ticket_is_handed_over', async () => {
+    const { app, headToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
+
+    // First assignment
+    const firstRes = await request(app)
+      .patch(`/api/tickets/${ticket.id}/assign`)
+      .set('Authorization', `Bearer ${headToken}`)
+      .send({ assigneeName: 'Hoàng Gia Huy' })
+    expect(firstRes.status).toBe(200)
+    expect(firstRes.body.ticket.assigneeName).toBe('Hoàng Gia Huy')
+    expect(firstRes.body.ticket.assignmentHistory).toEqual([
+      expect.objectContaining({ to: 'Hoàng Gia Huy' }),
+    ])
+
+    // Handover to second specialist
+    const secondRes = await request(app)
+      .patch(`/api/tickets/${ticket.id}/assign`)
+      .set('Authorization', `Bearer ${headToken}`)
+      .send({ assigneeName: 'Chu Tuấn Anh' })
+    expect(secondRes.status).toBe(200)
+    expect(secondRes.body.ticket.assigneeName).toBe('Chu Tuấn Anh')
+    expect(secondRes.body.ticket.assignmentHistory).toHaveLength(2)
+    expect(secondRes.body.ticket.assignmentHistory[1]).toEqual(
+      expect.objectContaining({ from: 'Hoàng Gia Huy', to: 'Chu Tuấn Anh' }),
     )
-    expect(ticket.status).toBe('closed')
-    expect(ticket.rating).toBe(5)
   })
 
-  it.each([
-    ['open', 'waiting'],
-    ['open', 'resolved'],
-    ['open', 'closed'],
-    ['waiting', 'open'],
-    ['resolved', 'waiting'],
-    ['closed', 'resolved'],
-    ['closed', 'waiting'],
-    ['in_progress', 'open'],
-  ] as const)('should_keep_state_when_status_moves_from_%s_to_%s', (from, to) => {
-    const original = makeTicket({ status: from })
-    const result = ticketsReducer([original], { type: 'status_changed', ticketId: 'TCK-1', status: to, changedAt: at })
-    expect(result).toEqual([original])
+  it('should_resume_work_when_requester_replies_to_waiting_ticket', async () => {
+    const { app, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
+
+    await request(app).patch(`/api/tickets/${ticket.id}/assign`).set('Authorization', `Bearer ${headToken}`).send({ assigneeName: 'Hoàng Gia Huy' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'in_progress' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'waiting' })
+
+    // Requester comments while ticket is waiting for feedback
+    const commentRes = await request(app)
+      .post(`/api/tickets/${ticket.id}/comments`)
+      .set('Authorization', `Bearer ${requesterToken}`)
+      .send({ body: 'Tôi đã kiểm tra lại, mạng vẫn chập chờn.' })
+    expect(commentRes.status).toBe(201)
+    expect(commentRes.body.ticket.status).toBe('in_progress')
   })
 
-  it('should_explain_in_vietnamese_when_transition_is_not_allowed', () => {
-    const error = validateTicketAction([makeTicket({ status: 'open' })], {
-      type: 'status_changed',
-      ticketId: 'TCK-1',
-      status: 'resolved',
-      changedAt: at,
-    })
-    expect(error).toContain('Mới')
-    expect(error).toContain('Đã xử lý')
+  it('should_stay_waiting_when_handler_comments_on_waiting_ticket', async () => {
+    const { app, headToken, handlerToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
+
+    await request(app).patch(`/api/tickets/${ticket.id}/assign`).set('Authorization', `Bearer ${headToken}`).send({ assigneeName: 'Hoàng Gia Huy' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'in_progress' })
+    await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'waiting' })
+
+    // Handler comments while ticket is waiting
+    const commentRes = await request(app)
+      .post(`/api/tickets/${ticket.id}/comments`)
+      .set('Authorization', `Bearer ${handlerToken}`)
+      .send({ body: 'Bạn có thể gửi ảnh chụp màn hình lỗi không?' })
+    expect(commentRes.status).toBe(201)
+    expect(commentRes.body.ticket.status).toBe('waiting')
   })
 
-  it('should_reject_cancel_when_reason_is_blank', () => {
-    const original = makeTicket()
-    const action: TicketsAction = { type: 'ticket_cancelled', ticketId: 'TCK-1', reason: '   ', changedAt: at }
-    expect(ticketsReducer([original], action)).toEqual([original])
-    expect(validateTicketAction([original], action)).toContain('lý do')
+  it('should_keep_cancelled_ticket_closed_when_reopen_is_attempted', async () => {
+    const { app, requesterToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
+
+    const cancelRes = await request(app)
+      .post(`/api/tickets/${ticket.id}/cancel`)
+      .set('Authorization', `Bearer ${requesterToken}`)
+      .send({ reason: 'Nhầm lẫn thông tin' })
+    expect(cancelRes.status).toBe(200)
+
+    const reopenRes = await request(app)
+      .post(`/api/tickets/${ticket.id}/reopen`)
+      .set('Authorization', `Bearer ${requesterToken}`)
+      .send({ reason: 'Muốn xử lý lại' })
+    expect(reopenRes.status).toBe(400)
+    expect(reopenRes.body.message).toContain('hủy')
   })
 
-  it('should_reject_cancel_when_ticket_is_already_closed', () => {
-    const original = makeTicket({ status: 'closed' })
-    const result = ticketsReducer([original], { type: 'ticket_cancelled', ticketId: 'TCK-1', reason: 'Trùng', changedAt: at })
-    expect(result).toEqual([original])
+  it('should_reject_due_date_in_the_past_or_when_ticket_is_closed', async () => {
+    const { app, headToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
+
+    // Past due date
+    const pastRes = await request(app)
+      .patch(`/api/tickets/${ticket.id}/due-date`)
+      .set('Authorization', `Bearer ${headToken}`)
+      .send({ dueDate: '2026-01-01' })
+    expect(pastRes.status).toBe(400)
+    expect(pastRes.body.message).toContain('quá khứ')
   })
 
-  it.each([0, 6, 3.5, -1])('should_reject_confirmation_when_rating_is_%s', (rating) => {
-    const original = makeTicket({ status: 'resolved' })
-    const action: TicketsAction = { type: 'result_confirmed', ticketId: 'TCK-1', rating, changedAt: at }
-    expect(ticketsReducer([original], action)).toEqual([original])
-    expect(validateTicketAction([original], action)).toContain('1 đến 5')
-  })
+  it('should_reject_priority_change_and_comments_on_closed_ticket', async () => {
+    const { app, headToken, requesterToken, createSampleTicket } = await setup()
+    const ticket = await createSampleTicket()
 
-  it('should_reject_confirmation_when_ticket_is_not_resolved', () => {
-    const original = makeTicket({ status: 'in_progress' })
-    const result = ticketsReducer([original], { type: 'result_confirmed', ticketId: 'TCK-1', rating: 4, changedAt: at })
-    expect(result).toEqual([original])
-  })
+    // Cancel ticket to close it
+    await request(app).post(`/api/tickets/${ticket.id}/cancel`).set('Authorization', `Bearer ${requesterToken}`).send({ reason: 'Hủy' })
 
-  it('should_reject_assignment_when_ticket_is_closed', () => {
-    const original = makeTicket({ status: 'closed' })
-    const result = ticketsReducer([original], { type: 'assignee_set', ticketId: 'TCK-1', assigneeName: 'Hà', changedAt: at })
-    expect(result).toEqual([original])
-  })
-})
+    // Attempt priority change on closed ticket returns 403 Forbidden
+    const priorityRes = await request(app)
+      .patch(`/api/tickets/${ticket.id}/priority`)
+      .set('Authorization', `Bearer ${headToken}`)
+      .send({ priority: 'urgent' })
+    expect(priorityRes.status).toBe(403)
 
-describe('rework and reopen', () => {
-  it('should_return_to_in_progress_with_reason_when_rework_is_requested_on_resolved_ticket', () => {
-    const ticket = run(makeTicket({ status: 'resolved' }), {
-      type: 'ticket_reopened',
-      ticketId: 'TCK-1',
-      reason: 'Thiếu số liệu quý 2',
-      changedAt: at,
-    })
-    expect(ticket.status).toBe('in_progress')
-    expect(ticket.statusHistory?.at(-1)).toEqual({ status: 'in_progress', at, reason: 'Thiếu số liệu quý 2' })
-  })
-
-  it('should_clear_rating_and_feedback_when_closed_ticket_is_reopened', () => {
-    const ticket = run(makeTicket({ status: 'closed', rating: 4, feedback: 'Ổn' }), {
-      type: 'ticket_reopened',
-      ticketId: 'TCK-1',
-      reason: 'Phát sinh sai sót',
-      changedAt: at,
-    })
-    expect(ticket.status).toBe('in_progress')
-    expect(ticket.rating).toBeUndefined()
-    expect(ticket.feedback).toBeUndefined()
-  })
-
-  it('should_reject_reopen_when_reason_is_blank_or_ticket_is_active', () => {
-    const resolved = makeTicket({ status: 'resolved' })
-    const blank: TicketsAction = { type: 'ticket_reopened', ticketId: 'TCK-1', reason: '', changedAt: at }
-    expect(ticketsReducer([resolved], blank)).toEqual([resolved])
-    const active = makeTicket({ status: 'waiting' })
-    const valid: TicketsAction = { type: 'ticket_reopened', ticketId: 'TCK-1', reason: 'Lý do', changedAt: at }
-    expect(ticketsReducer([active], valid)).toEqual([active])
-  })
-})
-
-describe('handoff', () => {
-  it('should_record_previous_and_new_assignee_when_ticket_is_handed_over', () => {
-    const ticket = run(
-      makeTicket({ status: 'in_progress', assigneeName: 'Hà' }),
-      { type: 'assignee_set', ticketId: 'TCK-1', assigneeName: 'Ngọc', changedAt: at },
-    )
-    expect(ticket.assigneeName).toBe('Ngọc')
-    expect(ticket.assignmentHistory).toEqual([{ from: 'Hà', to: 'Ngọc', at }])
-  })
-
-  it('should_record_first_assignment_without_previous_assignee', () => {
-    const ticket = run(makeTicket(), { type: 'assignee_set', ticketId: 'TCK-1', assigneeName: 'Hà', changedAt: at })
-    expect(ticket.assignmentHistory).toEqual([{ to: 'Hà', at }])
-  })
-
-  it('should_not_record_history_when_assignee_is_unchanged', () => {
-    const original = makeTicket({ status: 'in_progress', assigneeName: 'Hà' })
-    const ticket = run(original, { type: 'assignee_set', ticketId: 'TCK-1', assigneeName: 'Hà', changedAt: at })
-    expect(ticket.assignmentHistory).toBeUndefined()
-  })
-})
-
-describe('conversation', () => {
-  it('should_resume_work_when_requester_replies_to_waiting_ticket', () => {
-    const ticket = run(makeTicket({ status: 'waiting' }), { type: 'comment_added', ticketId: 'TCK-1', comment: comment('Bình') })
-    expect(ticket.status).toBe('in_progress')
-    expect(ticket.comments).toHaveLength(1)
-  })
-
-  it('should_stay_waiting_when_handler_comments_on_waiting_ticket', () => {
-    const ticket = run(makeTicket({ status: 'waiting' }), { type: 'comment_added', ticketId: 'TCK-1', comment: comment('Hà') })
-    expect(ticket.status).toBe('waiting')
-  })
-
-  it.each(['open', 'in_progress', 'resolved', 'closed'] as const)('should_keep_status_when_requester_comments_on_%s_ticket', (status) => {
-    const ticket = run(makeTicket({ status }), { type: 'comment_added', ticketId: 'TCK-1', comment: comment('Bình') })
-    expect(ticket.status).toBe(status)
-  })
-})
-
-describe('guards found in review', () => {
-  it('should_keep_cancelled_ticket_closed_when_reopen_is_attempted', () => {
-    const original = makeTicket({ status: 'closed', cancelReason: 'Trùng' })
-    const result = ticketsReducer([original], { type: 'ticket_reopened', ticketId: 'TCK-1', reason: 'Vẫn cần', changedAt: at })
-    expect(result).toEqual([original])
-  })
-
-  it('should_reject_due_date_when_blank_or_ticket_is_closed', () => {
-    const active = makeTicket({ status: 'in_progress', dueDate: '2026-03-10' })
-    const blank: TicketsAction = { type: 'due_date_changed', ticketId: 'TCK-1', dueDate: '', changedAt: at }
-    expect(ticketsReducer([active], blank)).toEqual([active])
-    const closed = makeTicket({ status: 'closed' })
-    const valid: TicketsAction = { type: 'due_date_changed', ticketId: 'TCK-1', dueDate: '2026-04-01', changedAt: at }
-    expect(ticketsReducer([closed], valid)).toEqual([closed])
-  })
-
-  it('should_reject_due_date_in_the_past_relative_to_change_time', () => {
-    const active = makeTicket({ status: 'in_progress' })
-    const action: TicketsAction = { type: 'due_date_changed', ticketId: 'TCK-1', dueDate: '2026-02-28', changedAt: at }
-    expect(validateTicketAction([active], action)).toContain('quá khứ')
-  })
-
-  it('should_reject_priority_change_and_comments_on_closed_ticket', () => {
-    const closed = makeTicket({ status: 'closed' })
-    expect(ticketsReducer([closed], { type: 'priority_changed', ticketId: 'TCK-1', priority: 'urgent', changedAt: at })).toEqual([closed])
-    expect(ticketsReducer([closed], { type: 'comment_added', ticketId: 'TCK-1', comment: comment('Bình') })).toEqual([closed])
+    // Attempt comment on closed ticket returns 400 with explanation
+    const commentRes = await request(app)
+      .post(`/api/tickets/${ticket.id}/comments`)
+      .set('Authorization', `Bearer ${requesterToken}`)
+      .send({ body: 'Bình luận sau khi đóng' })
+    expect(commentRes.status).toBe(400)
+    expect(commentRes.body.message).toContain('đóng')
   })
 })

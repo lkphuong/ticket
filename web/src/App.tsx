@@ -1,4 +1,5 @@
 import { Route, Routes } from 'react-router-dom'
+import { PasswordChangeGate } from './components/auth/PasswordChangeGate.tsx'
 import { AppShell } from './components/layout/AppShell.tsx'
 import { ToastProvider } from './lib/ToastProvider.tsx'
 import { DashboardPage } from './pages/DashboardPage.tsx'
@@ -11,24 +12,34 @@ import { TicketsProvider } from './state/TicketsProvider.tsx'
 import { useAuth } from './state/useAuth.ts'
 
 export default function App() {
-  const { viewer } = useAuth()
+  const { viewer, isLoading } = useAuth()
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-sm font-medium text-ink-muted">Đang tải thông tin tài khoản...</p>
+      </div>
+    )
+  }
 
   return (
     <ToastProvider>
       {!viewer ? (
         <LoginPage />
       ) : (
-        <TicketsProvider viewer={viewer}>
-          <Routes>
-            <Route element={<AppShell />}>
-              <Route index element={<DashboardPage />} />
-              <Route path="tickets" element={<TicketListPage />} />
-              <Route path="tickets/new" element={<NewTicketPage />} />
-              <Route path="tickets/:ticketId" element={<TicketDetailPage />} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Route>
-          </Routes>
-        </TicketsProvider>
+        <PasswordChangeGate>
+          <TicketsProvider viewer={viewer}>
+            <Routes>
+              <Route element={<AppShell />}>
+                <Route index element={<DashboardPage />} />
+                <Route path="tickets" element={<TicketListPage />} />
+                <Route path="tickets/new" element={<NewTicketPage />} />
+                <Route path="tickets/:ticketId" element={<TicketDetailPage />} />
+                <Route path="*" element={<NotFoundPage />} />
+              </Route>
+            </Routes>
+          </TicketsProvider>
+        </PasswordChangeGate>
       )}
     </ToastProvider>
   )

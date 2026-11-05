@@ -1,6 +1,4 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { MEMBERS } from '../../data/members.ts'
-import { MOCK_PASSWORD } from '../../lib/auth.ts'
 import { buildInbox } from '../../lib/ticketInbox.ts'
 import { ROLE_LABELS, ROLE_STRIPE_CLASSES, getViewerRole } from '../../lib/viewerRole.ts'
 import { useAuth } from '../../state/useAuth.ts'
@@ -13,17 +11,9 @@ import { ThemeToggle } from '../ui/ThemeToggle.tsx'
 
 const NEW_TICKET_PATH = '/tickets/new'
 
-const NAV_ITEMS: { to: string; label: string; end: boolean; icon: IconName }[] = [
+const BASE_NAV_ITEMS: { to: string; label: string; end: boolean; icon: IconName }[] = [
   { to: '/', label: 'Tổng quan', end: true, icon: 'home' },
   { to: '/tickets', label: 'Yêu cầu hỗ trợ', end: false, icon: 'inbox' },
-  { to: NEW_TICKET_PATH, label: 'Tạo yêu cầu', end: true, icon: 'plus' },
-]
-
-const KEY_PERSONAS = [
-  { username: 'minhanh', label: 'Minh Anh (Nhân viên KD)' },
-  { username: 'quocbao', label: 'Quốc Bảo (Trưởng phòng KD)' },
-  { username: 'giahuy', label: 'Gia Huy (Chuyên viên CNTT)' },
-  { username: 'haidang', label: 'Hải Đăng (Ban Lãnh đạo)' },
 ]
 
 function navLinkClass(isActive: boolean): string {
@@ -54,17 +44,8 @@ function WordMark() {
 
 function ViewerSummary() {
   const { viewer } = useTickets()
-  const { logout, login } = useAuth()
+  const { logout } = useAuth()
   const role = getViewerRole(viewer)
-
-  function handlePersonaSwitch(event: React.ChangeEvent<HTMLSelectElement>) {
-    const targetUsername = event.target.value
-    if (!targetUsername) return
-    login(targetUsername, MOCK_PASSWORD)
-  }
-
-  // Locates username of active viewer to sync select state
-  const currentMember = MEMBERS.find((member) => member.name === viewer.name)
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -78,29 +59,10 @@ function ViewerSummary() {
         </span>
       </div>
 
-      <div className="flex items-center gap-1.5">
-        <label htmlFor="persona-quick-switch" className="sr-only">
-          Chuyển đổi góc nhìn vai trò
-        </label>
-        <select
-          id="persona-quick-switch"
-          aria-label="Chuyển đổi góc nhìn vai trò"
-          value={currentMember?.username ?? ''}
-          onChange={handlePersonaSwitch}
-          className="rounded-md border border-line-strong bg-canvas px-2 py-1 text-xs font-medium text-ink focus:border-accent-600 focus:outline-none"
-        >
-          {KEY_PERSONAS.map((persona) => (
-            <option key={persona.username} value={persona.username}>
-              {persona.label}
-            </option>
-          ))}
-        </select>
-
-        <Button variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs" onClick={logout}>
-          <Icon name="logout" />
-          Đăng xuất
-        </Button>
-      </div>
+      <Button variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs" onClick={() => logout()}>
+        <Icon name="logout" />
+        Đăng xuất
+      </Button>
     </div>
   )
 }
@@ -110,6 +72,12 @@ export function AppShell() {
   const { pathname } = useLocation()
   const waitingCount = buildInbox(tickets, viewer).reduce((sum, group) => sum + group.tickets.length, 0)
   const role = getViewerRole(viewer)
+
+  // Administrators operate as read-only supervisors and do not create tickets
+  const navItems =
+    role === 'admin'
+      ? BASE_NAV_ITEMS
+      : [...BASE_NAV_ITEMS, { to: NEW_TICKET_PATH, label: 'Tạo yêu cầu', end: true, icon: 'plus' as IconName }]
 
   return (
     <div className="min-h-screen">
@@ -126,7 +94,7 @@ export function AppShell() {
         </div>
         <div className="mx-auto max-w-6xl px-4 md:px-8">
           <nav aria-label="Điều hướng chính" className="-mb-px flex gap-1 overflow-x-auto pt-1">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}

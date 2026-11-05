@@ -8,9 +8,9 @@ function belongsToDepartment(ticket: Ticket, viewer: Viewer): boolean {
   return ticket.fromDepartment === viewer.department || ticket.toDepartment === viewer.department
 }
 
-// Staff see tickets they raised or handle; heads add every ticket sent or received by their department
+// Staff see tickets they raised or handle; heads add every ticket sent or received by their department; admins view all
 export function canViewTicket(ticket: Ticket, viewer: Viewer): boolean {
-  if (viewer.isExecutive) return true
+  if (viewer.isExecutive || viewer.isAdmin || viewer.role === 'admin') return true
   if (isInvolved(ticket, viewer)) return true
   return viewer.isDepartmentHead && belongsToDepartment(ticket, viewer)
 }

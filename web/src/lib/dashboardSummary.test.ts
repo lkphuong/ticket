@@ -39,7 +39,7 @@ describe('buildDashboardKpis', () => {
   })
 
   it('should_show_placeholder_csat_when_no_ticket_is_rated', () => {
-    const kpis = buildDashboardKpis('executive', [makeTicket({})], member, NOW)
+    const kpis = buildDashboardKpis('admin', [makeTicket({})], member, NOW)
     expect(kpis.find((kpi) => kpi.key === 'csat')?.value).toBe('–')
   })
 })

@@ -100,32 +100,39 @@ export function TicketDetailPage() {
     else notify(successMessage, tone);
   }
 
-  function handleAssign(assigneeName: string) {
-    report(assignTicket(ticket!.id, assigneeName), `Đã phân công xử lý cho ${assigneeName}`, "success");
+  async function handleAssign(assigneeName: string) {
+    const err = await assignTicket(ticket!.id, assigneeName);
+    report(err, `Đã phân công xử lý cho ${assigneeName}`, "success");
   }
 
-  function handleChangeStatus(status: TicketStatus) {
-    report(changeStatus(ticket!.id, status), "Đã cập nhật trạng thái tiến độ");
+  async function handleChangeStatus(status: TicketStatus) {
+    const err = await changeStatus(ticket!.id, status);
+    report(err, "Đã cập nhật trạng thái tiến độ");
   }
 
-  function handleConfirm(rating: number, feedback?: string) {
-    report(confirmResult(ticket!.id, rating, feedback), "Đã hoàn tất nghiệm thu kết quả", "success");
+  async function handleConfirm(rating: number, feedback?: string) {
+    const err = await confirmResult(ticket!.id, rating, feedback);
+    report(err, "Đã hoàn tất nghiệm thu kết quả", "success");
   }
 
-  function handleReopen(reason: string) {
-    report(reopenTicket(ticket!.id, reason), "Đã yêu cầu xử lý lại", "neutral");
+  async function handleReopen(reason: string) {
+    const err = await reopenTicket(ticket!.id, reason);
+    report(err, "Đã yêu cầu xử lý lại", "neutral");
   }
 
-  function handleChangePriority(priority: TicketPriority) {
-    report(changePriority(ticket!.id, priority), "Đã cập nhật mức độ ưu tiên");
+  async function handleChangePriority(priority: TicketPriority) {
+    const err = await changePriority(ticket!.id, priority);
+    report(err, "Đã cập nhật mức độ ưu tiên");
   }
 
-  function handleChangeDueDate(dueDate: string) {
-    report(changeDueDate(ticket!.id, dueDate), `Đã điều chỉnh thời hạn đến ngày ${formatDate(dueDate)}`);
+  async function handleChangeDueDate(dueDate: string) {
+    const err = await changeDueDate(ticket!.id, dueDate);
+    report(err, `Đã điều chỉnh thời hạn đến ngày ${formatDate(dueDate)}`);
   }
 
-  function handleCancelTicket(reason: string) {
-    report(cancelTicket(ticket!.id, reason), "Đã hủy yêu cầu điều phối", "danger");
+  async function handleCancelTicket(reason: string) {
+    const err = await cancelTicket(ticket!.id, reason);
+    report(err, "Đã hủy yêu cầu điều phối", "danger");
   }
 
   return (
@@ -273,10 +280,11 @@ export function TicketDetailPage() {
               title={`Trao đổi nội bộ & chuyển giao (${ticket.comments.length})`}
             >
               <CommentThread comments={ticket.comments} />
-              {!viewer.isExecutive && (
+              {!viewer.isExecutive && !viewer.isAdmin && viewer.role !== 'admin' && (
               <CommentForm
-                onSubmit={(body, attachments) => {
-                  report(addComment(ticket.id, body, attachments), "Đã gửi phản hồi thành công");
+                onSubmit={async (body, attachments) => {
+                  const err = await addComment(ticket.id, body, attachments);
+                  report(err, "Đã gửi phản hồi thành công");
                 }}
               />
               )}
