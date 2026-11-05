@@ -3,17 +3,20 @@ import type { Express, NextFunction, Request, Response } from 'express'
 import { AuthService } from './auth/authService.ts'
 import { MemorySessionService } from './auth/sessionService.ts'
 import type { ISessionService } from './auth/sessionService.ts'
+import { CmsService } from './cms/cmsService.ts'
 import type { AppConfig } from './config/environment.ts'
 import { createAuthMiddleware } from './middleware/authMiddleware.ts'
 import { InMemoryTicketStore } from './repositories/inMemoryTicketStore.ts'
 import type { ITicketStore } from './repositories/interfaces.ts'
 import { createAuthRouter } from './routes/authRoutes.ts'
+import { createCmsRouter } from './routes/cmsRoutes.ts'
 import { createHealthRouter } from './routes/health.ts'
 
 export interface AppDependencies {
   readonly store?: ITicketStore
   readonly sessionService?: ISessionService
   readonly authService?: AuthService
+  readonly cmsService?: CmsService
 }
 
 // Factory constructing configured Express application instance
@@ -23,6 +26,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
   const store = deps.store ?? new InMemoryTicketStore()
   const sessionService = deps.sessionService ?? new MemorySessionService()
   const authService = deps.authService ?? new AuthService(store.members, sessionService)
+  const cmsService = deps.cmsService ?? new CmsService(store)
   const authMiddleware = createAuthMiddleware(sessionService, store.members)
 
   // Standard JSON payload decoding
@@ -33,6 +37,9 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
 
   // Authentication routing
   app.use('/api/auth', createAuthRouter(authService, authMiddleware))
+
+  // CMS management routing
+  app.use('/api/cms', createCmsRouter(cmsService, authMiddleware))
 
   // Explicit catch-all handler for undefined routes
   app.use((_req: Request, res: Response) => {
