@@ -4,10 +4,10 @@
 
 **Blocked by:** 07
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Chỉ Trưởng phòng đúng phòng tiếp nhận làm được, Nhân viên và Quản trị bị từ chối
-- [ ] Chỉ phân công được Ticket còn hoạt động và người được giao thuộc phòng tiếp nhận
-- [ ] Phân công Ticket Mới chuyển Đang xử lý
-- [ ] Chuyển giao ghi người cũ, người mới, thời điểm và người thực hiện
-- [ ] Hạn chót mới không được ở quá khứ
+- [x] Chỉ Trưởng phòng đúng phòng tiếp nhận làm được, Nhân viên và Quản trị bị từ chối
+- [x] Chỉ phân công được Ticket còn hoạt động và người được giao thuộc phòng tiếp nhận
+- [x] Phân công Ticket Mới chuyển Đang xử lý
+- [x] Chuyển giao ghi người cũ, người mới, thời điểm và người thực hiện
+- [x] Hạn chót mới không được ở quá khứ

@@ -1,5 +1,11 @@
-import { buildTicket, validateNewTicket } from '@vtdesk/domain'
-import type { Department, NewTicketInput, Ticket, TicketPriority, Viewer } from '@vtdesk/domain'
+import {
+  buildTicket,
+  canEditDueDate,
+  canEditPriority,
+  isActiveTicket,
+  validateNewTicket,
+} from '@vtdesk/domain'
+import type { Department, NewTicketInput, Ticket, TicketActor, TicketPriority, Viewer } from '@vtdesk/domain'
 import type { ITicketStore } from '../repositories/interfaces.ts'
 
 export interface CreateTicketInput {
@@ -22,6 +28,13 @@ export interface TicketCreator {
   readonly department: string
   readonly role: 'staff' | 'head' | 'admin'
   readonly isDepartmentHead: boolean
+}
+
+export class TicketNotFoundError extends Error {
+  constructor(message: string = 'Ticket không tồn tại hoặc không thể truy cập.') {
+    super(message)
+    this.name = 'TicketNotFoundError'
+  }
 }
 
 export class TicketAuthorizationError extends Error {
@@ -120,5 +133,158 @@ export class TicketService {
       await this.store.tickets.save(newTicket)
       return newTicket
     })
+  }
+
+  // Assigns a specialist from the receiving department to handle the ticket
+  async assignTicket(ticketId: string, assigneeName: string, creator: TicketCreator): Promise<Ticket> {
+    const ticket = await this.store.tickets.findById(ticketId)
+    if (!ticket) {
+      throw new TicketNotFoundError()
+    }
+
+    // 1. Enforce receiving department head authority
+    if (creator.role !== 'head' || !creator.isDepartmentHead || creator.department !== ticket.toDepartment) {
+      throw new TicketAuthorizationError('Chỉ Trưởng phòng của phòng tiếp nhận mới được phân công Ticket.')
+    }
+
+    // 2. Validate ticket lifecycle state: only active tickets may be assigned
+    if (!isActiveTicket(ticket)) {
+      throw new TicketValidationError('Chỉ phân công được yêu cầu còn hoạt động.', {
+        status: 'Yêu cầu không còn hoạt động.',
+      })
+    }
+
+    // 3. Ensure designated assignee is an active member belonging to the receiving department
+    const members = await this.store.members.findAll()
+    const targetMember = members.find(
+      (m) => m.name === assigneeName && m.department === ticket.toDepartment && m.isActive,
+    )
+    if (!targetMember) {
+      throw new TicketValidationError('Người được giao phải là thành viên đang hoạt động của phòng tiếp nhận.', {
+        assigneeName: 'Người được giao không thuộc phòng tiếp nhận hoặc đã bị khóa.',
+      })
+    }
+
+    const now = this.clock()
+    const timestamp = now.toISOString()
+    const actor: TicketActor = { name: creator.name, department: creator.department as Department }
+
+    // 4. Record handoff or initial assignment in history
+    const history = ticket.assignmentHistory ? [...ticket.assignmentHistory] : []
+    const assignmentEntry = ticket.assigneeName
+      ? { from: ticket.assigneeName, to: assigneeName, at: timestamp, actor }
+      : { to: assigneeName, at: timestamp, actor }
+    history.push(assignmentEntry)
+
+    // 5. Transition newly assigned tickets from "open" to "in_progress"
+    const nextStatus = ticket.status === 'open' ? 'in_progress' : ticket.status
+    const statusHistory = ticket.statusHistory ? [...ticket.statusHistory] : []
+    if (ticket.status === 'open') {
+      statusHistory.push({ status: 'in_progress', at: timestamp, actor })
+    }
+
+    const updatedTicket: Ticket = {
+      ...ticket,
+      assigneeName,
+      status: nextStatus,
+      assignmentHistory: history,
+      statusHistory,
+      updatedAt: timestamp,
+    }
+
+    await this.store.tickets.save(updatedTicket)
+    return updatedTicket
+  }
+
+  // Updates priority level of an active ticket
+  async updatePriority(ticketId: string, priority: TicketPriority, creator: TicketCreator): Promise<Ticket> {
+    const ticket = await this.store.tickets.findById(ticketId)
+    if (!ticket) {
+      throw new TicketNotFoundError()
+    }
+
+    if (!['low', 'medium', 'high', 'urgent'].includes(priority)) {
+      throw new TicketValidationError('Mức ưu tiên không hợp lệ.', {
+        priority: 'Vui lòng chọn mức ưu tiên hợp lệ.',
+      })
+    }
+
+    const viewer: Viewer = {
+      name: creator.name,
+      department: creator.department as Department,
+      isDepartmentHead: creator.isDepartmentHead,
+      isExecutive: creator.role === 'admin',
+    }
+
+    if (!canEditPriority(ticket, viewer)) {
+      throw new TicketAuthorizationError('Bạn không có quyền thay đổi mức ưu tiên cho Ticket này.')
+    }
+
+    if (!isActiveTicket(ticket)) {
+      throw new TicketValidationError('Chỉ đổi được mức ưu tiên của yêu cầu còn hoạt động.', {
+        status: 'Yêu cầu không còn hoạt động.',
+      })
+    }
+
+    const timestamp = this.clock().toISOString()
+    const updatedTicket: Ticket = {
+      ...ticket,
+      priority,
+      updatedAt: timestamp,
+    }
+
+    await this.store.tickets.save(updatedTicket)
+    return updatedTicket
+  }
+
+  // Updates resolution deadline of an active ticket
+  async updateDueDate(ticketId: string, dueDate: string, creator: TicketCreator): Promise<Ticket> {
+    const ticket = await this.store.tickets.findById(ticketId)
+    if (!ticket) {
+      throw new TicketNotFoundError()
+    }
+
+    const viewer: Viewer = {
+      name: creator.name,
+      department: creator.department as Department,
+      isDepartmentHead: creator.isDepartmentHead,
+      isExecutive: creator.role === 'admin',
+    }
+
+    if (!canEditDueDate(ticket, viewer)) {
+      throw new TicketAuthorizationError('Bạn không có quyền thay đổi hạn chót cho Ticket này.')
+    }
+
+    if (!isActiveTicket(ticket)) {
+      throw new TicketValidationError('Chỉ đổi được hạn chót của yêu cầu còn hoạt động.', {
+        status: 'Yêu cầu không còn hoạt động.',
+      })
+    }
+
+    const now = this.clock()
+    const todayIso = now.toISOString().slice(0, 10)
+    const normalizedDueDate = dueDate?.trim()
+
+    if (!normalizedDueDate) {
+      throw new TicketValidationError('Vui lòng chọn hạn chót mới.', {
+        dueDate: 'Hạn chót không được để trống.',
+      })
+    }
+
+    if (normalizedDueDate < todayIso) {
+      throw new TicketValidationError('Hạn chót mới không được ở quá khứ.', {
+        dueDate: 'Hạn chót mới không được ở quá khứ.',
+      })
+    }
+
+    const timestamp = now.toISOString()
+    const updatedTicket: Ticket = {
+      ...ticket,
+      dueDate: normalizedDueDate,
+      updatedAt: timestamp,
+    }
+
+    await this.store.tickets.save(updatedTicket)
+    return updatedTicket
   }
 }
