@@ -38,6 +38,18 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
   // Authentication routing
   app.use('/api/auth', createAuthRouter(authService, authMiddleware))
 
+  // General authenticated template and SLA discovery endpoints (Staff, Head, Admin)
+  app.get('/api/templates', authMiddleware, async (req: Request, res: Response) => {
+    const department = req.query.department as string | undefined
+    const list = await cmsService.listTemplates(department, false)
+    res.status(200).json({ templates: list })
+  })
+
+  app.get('/api/slas', authMiddleware, async (_req: Request, res: Response) => {
+    const list = await cmsService.listDefaultSlas()
+    res.status(200).json({ slas: list })
+  })
+
   // CMS management routing
   app.use('/api/cms', createCmsRouter(cmsService, authMiddleware))
 

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { SessionData } from '../auth/sessionService.ts'
-import type { DbAuditLog, DbMember, ITicketStore } from '../repositories/interfaces.ts'
+import type { DbAuditLog, DbMember, DbRequestTemplate, ITicketStore } from '../repositories/interfaces.ts'
 
 export interface CreateMemberInput {
   readonly username: string
@@ -293,6 +293,119 @@ export class CmsService {
 
   async listAuditLogs(): Promise<DbAuditLog[]> {
     return this.store.auditLogs.findAll()
+  }
+
+  // Template management operations
+  async listTemplates(targetDepartment?: string, includeInactive: boolean = false): Promise<DbRequestTemplate[]> {
+    const all = targetDepartment
+      ? await this.store.templates.findByDepartment(targetDepartment)
+      : await this.store.templates.findAll()
+    if (includeInactive) return all
+    return all.filter((t) => t.isActive)
+  }
+
+  async createTemplate(
+    actor: SessionData,
+    input: { targetDepartment: string; title: string; description: string; purpose: string; expectedResult: string; defaultPriority: string },
+  ): Promise<DbRequestTemplate> {
+    const departments = await this.store.departments.findAll()
+    if (!departments.includes(input.targetDepartment)) {
+      throw new CmsValidationError(`Phòng ban đích "${input.targetDepartment}" không hợp lệ.`)
+    }
+
+    if (!input.title?.trim() || !input.description?.trim()) {
+      throw new CmsValidationError('Tiêu đề và mô tả mẫu không được để trống.')
+    }
+
+    const template: DbRequestTemplate = {
+      id: `tpl-${randomUUID().slice(0, 8)}`,
+      targetDepartment: input.targetDepartment,
+      title: input.title.trim(),
+      description: input.description.trim(),
+      purpose: input.purpose?.trim() || input.title.trim(),
+      expectedResult: input.expectedResult?.trim() || 'Hoàn thành theo yêu cầu.',
+      defaultPriority: input.defaultPriority || 'medium',
+      isActive: true,
+    }
+
+    await this.store.templates.save(template)
+    await this.recordAuditLog(actor, 'create_template', 'request_template', template.id, {
+      title: template.title,
+      targetDepartment: template.targetDepartment,
+      defaultPriority: template.defaultPriority,
+    })
+
+    return template
+  }
+
+  async updateTemplate(
+    actor: SessionData,
+    id: string,
+    updates: Partial<Omit<DbRequestTemplate, 'id'>>,
+  ): Promise<DbRequestTemplate> {
+    const all = await this.store.templates.findAll()
+    const existing = all.find((t) => t.id === id)
+    if (!existing) {
+      throw new CmsValidationError('Không tìm thấy mẫu yêu cầu.')
+    }
+
+    if (updates.targetDepartment) {
+      const departments = await this.store.departments.findAll()
+      if (!departments.includes(updates.targetDepartment)) {
+        throw new CmsValidationError(`Phòng ban đích "${updates.targetDepartment}" không hợp lệ.`)
+      }
+    }
+
+    const updated: DbRequestTemplate = {
+      ...existing,
+      ...updates,
+      title: updates.title !== undefined ? updates.title.trim() : existing.title,
+      description: updates.description !== undefined ? updates.description.trim() : existing.description,
+      purpose: updates.purpose !== undefined ? updates.purpose.trim() : existing.purpose,
+      expectedResult: updates.expectedResult !== undefined ? updates.expectedResult.trim() : existing.expectedResult,
+    }
+
+    await this.store.templates.save(updated)
+    await this.recordAuditLog(actor, 'update_template', 'request_template', id, {
+      updates,
+    })
+
+    return updated
+  }
+
+  // SLA management operations
+  async listDefaultSlas(): Promise<Array<{ priority: string; responseHours: number; resolutionHours: number }>> {
+    return this.store.slas.findAll()
+  }
+
+  async updateDefaultSla(
+    actor: SessionData,
+    priority: string,
+    responseHours: number,
+    resolutionHours: number,
+  ): Promise<{ priority: string; responseHours: number; resolutionHours: number }> {
+    const normalizedPriority = priority.toLowerCase()
+    if (!['low', 'medium', 'high', 'urgent'].includes(normalizedPriority)) {
+      throw new CmsValidationError(`Mức độ ưu tiên "${priority}" không hợp lệ.`)
+    }
+
+    if (responseHours <= 0 || resolutionHours <= 0) {
+      throw new CmsValidationError('Thời gian SLA phải lớn hơn 0 giờ.')
+    }
+
+    const record = {
+      priority: normalizedPriority,
+      responseHours,
+      resolutionHours,
+    }
+
+    await this.store.slas.save(record)
+    await this.recordAuditLog(actor, 'update_default_sla', 'default_sla', normalizedPriority, {
+      responseHours,
+      resolutionHours,
+    })
+
+    return record
   }
 
   private async recordAuditLog(

@@ -1,6 +1,7 @@
 import type { Ticket } from '@vtdesk/domain'
 import type {
   DbAuditLog,
+  DbDefaultSla,
   DbMember,
   DbNotification,
   DbRequestTemplate,
@@ -8,6 +9,7 @@ import type {
   IDepartmentRepository,
   IMemberRepository,
   INotificationRepository,
+  ISlaRepository,
   ITemplateRepository,
   ITicketRepository,
   ITicketStore,
@@ -96,6 +98,24 @@ export class InMemoryTemplateRepository implements ITemplateRepository {
   }
 }
 
+// In-memory implementation of default SLA repository
+export class InMemorySlaRepository implements ISlaRepository {
+  private readonly items = new Map<string, DbDefaultSla>()
+
+  async findAll(): Promise<DbDefaultSla[]> {
+    return Array.from(this.items.values()).map((s) => ({ ...s }))
+  }
+
+  async findByPriority(priority: string): Promise<DbDefaultSla | null> {
+    const item = this.items.get(priority)
+    return item ? { ...item } : null
+  }
+
+  async save(sla: DbDefaultSla): Promise<void> {
+    this.items.set(sla.priority, { ...sla })
+  }
+}
+
 // In-memory implementation of notification repository
 export class InMemoryNotificationRepository implements INotificationRepository {
   private readonly items = new Map<string, DbNotification>()
@@ -145,6 +165,7 @@ export class InMemoryTicketStore implements ITicketStore {
   readonly members = new InMemoryMemberRepository()
   readonly departments = new InMemoryDepartmentRepository()
   readonly templates = new InMemoryTemplateRepository()
+  readonly slas = new InMemorySlaRepository()
   readonly notifications = new InMemoryNotificationRepository()
   readonly auditLogs = new InMemoryAuditLogRepository()
 }
