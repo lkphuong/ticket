@@ -11,6 +11,7 @@ import type { ITicketStore } from './repositories/interfaces.ts'
 import { createAuthRouter } from './routes/authRoutes.ts'
 import { createCmsRouter } from './routes/cmsRoutes.ts'
 import { createHealthRouter } from './routes/health.ts'
+import { createTicketRouter } from './routes/ticketRoutes.ts'
 
 export interface AppDependencies {
   readonly store?: ITicketStore
@@ -52,6 +53,9 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
 
   // CMS management routing
   app.use('/api/cms', createCmsRouter(cmsService, authMiddleware))
+
+  // Ticket processing and query routing
+  app.use('/api/tickets', createTicketRouter(store, authMiddleware))
 
   // Explicit catch-all handler for undefined routes
   app.use((_req: Request, res: Response) => {
