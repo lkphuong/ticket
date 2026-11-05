@@ -5,15 +5,17 @@ import type { NewTicketInput, Ticket, TicketAttachment, TicketPriority, TicketSt
 export interface TicketsContextValue {
   tickets: Ticket[]
   viewer: Viewer
-  createTicket: (input: NewTicketInput) => Ticket
-  changeStatus: (ticketId: string, status: TicketStatus) => string | null
-  assignTicket: (ticketId: string, assigneeName: string) => string | null
-  confirmResult: (ticketId: string, rating: number, feedback?: string) => string | null
-  addComment: (ticketId: string, body: string, attachments?: TicketAttachment[]) => string | null
-  changePriority: (ticketId: string, priority: TicketPriority) => string | null
-  changeDueDate: (ticketId: string, dueDate: string) => string | null
-  cancelTicket: (ticketId: string, reason: string) => string | null
-  reopenTicket: (ticketId: string, reason: string) => string | null
+  isLoading?: boolean
+  refreshTickets?: () => Promise<void>
+  createTicket: (input: NewTicketInput) => Promise<Ticket>
+  changeStatus: (ticketId: string, status: TicketStatus, reason?: string) => Promise<string | null>
+  assignTicket: (ticketId: string, assigneeName: string) => Promise<string | null>
+  confirmResult: (ticketId: string, rating: number, feedback?: string) => Promise<string | null>
+  addComment: (ticketId: string, body: string, attachments?: TicketAttachment[]) => Promise<string | null>
+  changePriority: (ticketId: string, priority: TicketPriority) => Promise<string | null>
+  changeDueDate: (ticketId: string, dueDate: string) => Promise<string | null>
+  cancelTicket: (ticketId: string, reason: string) => Promise<string | null>
+  reopenTicket: (ticketId: string, reason: string) => Promise<string | null>
 }
 
 export const TicketsContext = createContext<TicketsContextValue | null>(null)

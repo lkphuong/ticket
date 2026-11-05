@@ -48,7 +48,7 @@ function headKpis(tickets: Ticket[], viewer: Viewer, now: Date): DashboardKpi[] 
   ]
 }
 
-function executiveKpis(tickets: Ticket[], now: Date): DashboardKpi[] {
+function adminKpis(tickets: Ticket[], now: Date): DashboardKpi[] {
   const overdue = countOverdue(tickets, now)
   const rating = calculateAverageRating(tickets)
 
@@ -62,7 +62,7 @@ function executiveKpis(tickets: Ticket[], now: Date): DashboardKpi[] {
 
 // Picks the few numbers each role acts on, instead of one wide grid for everybody
 export function buildDashboardKpis(role: ViewerRole, tickets: Ticket[], viewer: Viewer, now: Date): DashboardKpi[] {
-  if (role === 'executive') return executiveKpis(tickets, now)
+  if (role === 'admin' || (role as string) === 'executive') return adminKpis(tickets, now)
   if (role === 'head') return headKpis(tickets, viewer, now)
   return memberKpis(tickets, viewer, now)
 }

@@ -112,11 +112,15 @@ export interface NewTicketInput {
 }
 
 export interface Viewer {
+  id?: string
+  username?: string
   name: string
   department: Department
   isDepartmentHead: boolean
-  // Executives read company-wide load instead of working a queue
+  role?: 'staff' | 'head' | 'admin'
+  isAdmin?: boolean
   isExecutive?: boolean
+  requiresPasswordChange?: boolean
 }
 
 export function isActiveTicket(ticket: Ticket): boolean {

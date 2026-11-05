@@ -88,17 +88,25 @@ export function NewTicketPage() {
     )
   }
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (viewer.role === 'admin' || viewer.isAdmin || viewer.isExecutive) {
+      notify('Quản trị viên chỉ có quyền giám sát, không được tạo yêu cầu', 'danger')
+      return
+    }
     const found = validateNewTicket(input, viewer, new Date())
     setErrors(found)
     if (Object.keys(found).length > 0) {
       notify('Vui lòng kiểm tra và hoàn thiện các mục bắt buộc', 'danger')
       return
     }
-    const ticket = createTicket(input)
-    notify(`Đã gửi yêu cầu ${ticket.id} thành công`, 'success')
-    navigate(`/tickets/${ticket.id}`)
+    try {
+      const ticket = await createTicket(input)
+      notify(`Đã gửi yêu cầu ${ticket.id} thành công`, 'success')
+      navigate(`/tickets/${ticket.id}`)
+    } catch (err: any) {
+      notify(err.message || 'Không thể tạo yêu cầu', 'danger')
+    }
   }
 
   const departmentOptions = DEPARTMENTS.filter((department) => department !== viewer.department).map((department) => ({

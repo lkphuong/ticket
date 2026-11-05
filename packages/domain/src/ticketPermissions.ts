@@ -11,9 +11,9 @@ function isRequester(ticket: Ticket, viewer: Viewer): boolean {
   return ticket.requesterName === viewer.name
 }
 
-// Executives supervise only, so every permission below is denied to them regardless of who they are on the ticket
+// Administrative and executive supervisors possess read-only permissions across all tickets
 function withoutExecutive(viewer: Viewer, rule: () => boolean): boolean {
-  return !viewer.isExecutive && rule()
+  return !viewer.isExecutive && !viewer.isAdmin && viewer.role !== 'admin' && rule()
 }
 
 export function canAssign(ticket: Ticket, viewer: Viewer): boolean {
