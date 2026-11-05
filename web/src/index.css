@@ -1,0 +1,163 @@
+@import 'tailwindcss';
+@import '@fontsource/be-vietnam-pro/400.css';
+@import '@fontsource/be-vietnam-pro/500.css';
+@import '@fontsource/be-vietnam-pro/600.css';
+@import '@fontsource/be-vietnam-pro/700.css';
+
+@theme {
+  --font-sans: 'Be Vietnam Pro', ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  --color-canvas: #f3f5f8;
+  --color-surface: #ffffff;
+  --color-ink: #16202e;
+  --color-ink-muted: #556073;
+  --color-line: #e2e7ee;
+  --color-line-strong: #c3ccd8;
+
+  --color-accent-100: #fde6dc;
+  --color-accent-600: #d4501a;
+  --color-accent-700: #b04014;
+  --color-accent-800: #8a3210;
+
+  --color-blue-100: #dbe8fb;
+  --color-blue-700: #1d4ea0;
+
+  --color-sea-100: #d2ece8;
+  --color-sea-700: #0b6b63;
+
+  --color-ochre-100: #f6e2b0;
+  --color-ochre-500: #d19a14;
+  --color-ochre-800: #6a4600;
+
+  --color-brick-100: #fbd9de;
+  --color-brick-500: #c0173a;
+  --color-brick-700: #8f1030;
+
+  --color-moss-100: #d3ead9;
+  --color-moss-700: #1f6b3f;
+
+  --color-mine-100: #e6dcf4;
+  --color-mine-600: #6a3fa3;
+  --color-mine-800: #4a2a78;
+
+  --color-ash-200: #e6e9ee;
+  --color-ash-700: #475163;
+
+  --shadow-lift: 0 1px 2px rgb(22 32 46 / 0.06);
+}
+
+/* Dark palette: surfaces drop, pale tints become deep tints, strong text hues lighten */
+@media screen {
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+
+    --color-canvas: #0f1520;
+    --color-surface: #182130;
+    --color-ink: #e8edf5;
+    --color-ink-muted: #9aa6b8;
+    --color-line: #2a3547;
+    --color-line-strong: #3d4b61;
+
+    --color-accent-100: #4a2415;
+    --color-accent-600: #e8622a;
+    --color-accent-700: #f08a5a;
+    --color-accent-800: #f7b496;
+
+    --color-blue-100: #1b2f52;
+    --color-blue-700: #8db4f0;
+
+    --color-sea-100: #123a38;
+    --color-sea-700: #5cc4b9;
+
+    --color-ochre-100: #46350c;
+    --color-ochre-500: #d9a62a;
+    --color-ochre-800: #f0cd78;
+
+    --color-brick-100: #4a1620;
+    --color-brick-500: #e0476a;
+    --color-brick-700: #f08fa5;
+
+    --color-moss-100: #173a26;
+    --color-moss-700: #6fcb93;
+
+    --color-mine-100: #2e2147;
+    --color-mine-600: #8a63c9;
+    --color-mine-800: #cbb2f0;
+
+    --color-ash-200: #263143;
+    --color-ash-700: #b3bdcc;
+
+    --shadow-lift: 0 1px 2px rgb(0 0 0 / 0.4);
+  }
+
+  :root[data-theme='dark'] .select-control {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%239aa6b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+
+  :root[data-theme='dark'] .select-control:focus {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%23e8622a' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+}
+
+/* Larger base size: every rem-based utility scales with it */
+html {
+  font-size: 125%;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background-color: var(--color-accent-100);
+  color: var(--color-accent-800);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent-600);
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+
+/* Chevron for the custom select and date picker triggers */
+.select-control {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%23556073' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 0.75rem 0.5rem;
+}
+
+.select-control:focus {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%23d4501a' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.select-control:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Printed sheets always use the light, ink-on-paper look */
+@media print {
+  html {
+    font-size: 100%;
+  }
+
+  @page {
+    size: A4;
+    margin: 16mm 14mm;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    background-color: #ffffff;
+    color: #000000;
+  }
+}

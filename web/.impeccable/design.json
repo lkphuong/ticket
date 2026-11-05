@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-04T00:00:00Z",
+  "title": "Design System: VTDesk",
+  "extensions": {
+    "colorMeta": {
+      "jade-600": { "role": "primary", "displayName": "Jade", "canonical": "#0f6b6b", "tonalRamp": ["#08302f", "#0a4545", "#0b5555", "#0f6b6b", "#3d8c8a", "#74b0ab", "#cfe8e4", "#e8f4f2"] },
+      "lapis-700": { "role": "secondary", "displayName": "Lapis", "canonical": "#2d3a92", "tonalRamp": ["#141a4a", "#1f2872", "#2d3a92", "#4a58b0", "#7d88cc", "#a9b1e2", "#dbe0fa", "#eef0fc"] },
+      "ochre-500": { "role": "secondary", "displayName": "Ochre", "canonical": "#d19a14", "tonalRamp": ["#3b2800", "#6a4600", "#9a6a05", "#d19a14", "#e2b94d", "#eecf80", "#f6e2b0", "#fbf1d6"] },
+      "brick-500": { "role": "secondary", "displayName": "Brick", "canonical": "#b8402a", "tonalRamp": ["#4a1409", "#8f2c19", "#b8402a", "#cf6650", "#de8e7b", "#ebb4a7", "#f7d8d0", "#fbeae6"] },
+      "moss-700": { "role": "secondary", "displayName": "Moss", "canonical": "#1f6b3f", "tonalRamp": ["#0d3520", "#164f2e", "#1f6b3f", "#3f8a5c", "#6fae87", "#9fcab0", "#d3ead9", "#e9f5ed"] },
+      "mine-600": { "role": "tertiary", "displayName": "Reserved Purple", "canonical": "#6a3fa3", "tonalRamp": ["#2a1647", "#4a2a78", "#6a3fa3", "#8a64bc", "#a98dd0", "#c8b6e2", "#e6dcf4", "#f3edfa"] },
+      "canvas": { "role": "neutral", "displayName": "Cement Canvas", "canonical": "#eceee9", "tonalRamp": ["#14262b", "#4b5d61", "#7d8b86", "#b9c2ba", "#d2d8d1", "#dfe2dc", "#eceee9", "#fafaf8"] },
+      "rail": { "role": "neutral", "displayName": "Peacock Rail", "canonical": "#0b4244", "tonalRamp": ["#041b1c", "#08302f", "#0b4244", "#1c5b5c", "#4a8584", "#85b0ad", "#cfe6e2", "#e9f3f1"] }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Page title", "purpose": "Page header title, bold 1.5rem, tight tracking." },
+      "title": { "displayName": "Panel title", "purpose": "Panel headings, bold 0.875rem." },
+      "body": { "displayName": "Body", "purpose": "Rows, forms, controls at 0.875rem." },
+      "label": { "displayName": "Label", "purpose": "Badges, ids, metadata, legends at 0.75rem semibold, sentence case." }
+    },
+    "shadows": [
+      { "name": "lift", "value": "0 1px 2px rgb(20 38 43 / 0.08), 0 4px 12px rgb(20 38 43 / 0.06)", "purpose": "Declared in theme but not used by any component; the built system is flat." }
+    ],
+    "motion": [
+      { "name": "color-transition", "value": "transition-colors (Tailwind default, 150ms ease)", "purpose": "Hover color shifts on buttons, nav links, rows." },
+      { "name": "tile-hover-scale", "value": "scale(1.1) via transition-transform", "purpose": "Workload mosaic square hover." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main action in forms and ticket actions.",
+      "html": "<button class=\"ds-btn-primary\">Tạo ticket</button>",
+      "css": ".ds-btn-primary { background: var(--color-jade-600, #0f6b6b); color: #fff; border: 0; border-radius: 6px; padding: 8px 16px; font: 600 0.875rem 'Be Vietnam Pro', system-ui, sans-serif; cursor: pointer; transition: background-color 150ms; } .ds-btn-primary:hover { background: var(--color-jade-700, #0b5555); } .ds-btn-primary:focus-visible { outline: 2px solid #0f6b6b; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Lower-emphasis action on a surface.",
+      "html": "<button class=\"ds-btn-secondary\">Hủy</button>",
+      "css": ".ds-btn-secondary { background: #fafaf8; color: #14262b; border: 1px solid #b9c2ba; border-radius: 6px; padding: 8px 16px; font: 600 0.875rem 'Be Vietnam Pro', system-ui, sans-serif; cursor: pointer; transition: background-color 150ms; } .ds-btn-secondary:hover { background: #eceee9; } .ds-btn-secondary:focus-visible { outline: 2px solid #0f6b6b; outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Form field with jade focus ring.",
+      "html": "<input class=\"ds-input\" placeholder=\"Tiêu đề\" />",
+      "css": ".ds-input { width: 100%; box-sizing: border-box; background: #fafaf8; color: #14262b; border: 1px solid #b9c2ba; border-radius: 6px; padding: 8px 12px; font: 400 0.875rem 'Be Vietnam Pro', system-ui, sans-serif; } .ds-input::placeholder { color: rgb(75 93 97 / 0.7); } .ds-input:focus, .ds-input:focus-visible { outline: none; border-color: #0f6b6b; box-shadow: 0 0 0 2px rgb(15 107 107 / 0.25); }"
+    },
+    {
+      "name": "Rail Nav Link",
+      "kind": "nav",
+      "refersTo": "nav-link-active",
+      "description": "Navigation link on the teal rail, shown active.",
+      "html": "<nav class=\"ds-rail\"><a class=\"ds-nav-active\" href=\"#\">Tổng quan</a><a class=\"ds-nav\" href=\"#\">Danh sách ticket</a></nav>",
+      "css": ".ds-rail { background: #0b4244; padding: 12px; display: flex; flex-direction: column; gap: 4px; width: 200px; } .ds-nav, .ds-nav-active { border-radius: 6px; padding: 8px 12px; font: 500 0.875rem 'Be Vietnam Pro', system-ui, sans-serif; text-decoration: none; transition: background-color 150ms; } .ds-nav { color: #cfe6e2; } .ds-nav:hover { background: #08302f; } .ds-nav-active { background: #1c5b5c; color: #fff; } .ds-nav:focus-visible, .ds-nav-active:focus-visible { outline: 2px solid #cfe6e2; outline-offset: 2px; }"
+    },
+    {
+      "name": "Status and Mine Badges",
+      "kind": "chip",
+      "refersTo": "status-badge-open",
+      "description": "Tinted status chips, outline priority chip, and the reserved purple mine badge.",
+      "html": "<span class=\"ds-chip ds-open\">Mới</span> <span class=\"ds-chip ds-prog\">Đang xử lý</span> <span class=\"ds-chip ds-urgent\">Khẩn</span> <span class=\"ds-chip ds-mine\">Chờ bạn</span>",
+      "css": ".ds-chip { display: inline-flex; border-radius: 4px; padding: 2px 8px; font: 600 0.75rem 'Be Vietnam Pro', system-ui, sans-serif; white-space: nowrap; } .ds-open { background: #dbe0fa; color: #2d3a92; } .ds-prog { background: #cfe8e4; color: #0a4545; } .ds-urgent { color: #8f2c19; box-shadow: inset 0 0 0 2px #b8402a; } .ds-mine { background: #6a3fa3; color: #fff; }"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Bone surface container with hairline border and header rule.",
+      "html": "<section class=\"ds-panel\"><header class=\"ds-panel-head\">Chờ bạn xử lý</header><div class=\"ds-panel-body\">Nội dung</div></section>",
+      "css": ".ds-panel { background: #fafaf8; border: 1px solid #d2d8d1; border-radius: 8px; color: #14262b; font-family: 'Be Vietnam Pro', system-ui, sans-serif; } .ds-panel-head { padding: 12px 16px; border-bottom: 1px solid #d2d8d1; font-size: 0.875rem; font-weight: 700; } .ds-panel-body { padding: 16px; font-size: 0.875rem; }"
+    },
+    {
+      "name": "Workload Mosaic Row",
+      "kind": "custom",
+      "refersTo": "panel",
+      "description": "Department tiles in their pattern, framed by a status ring with a surface gap.",
+      "html": "<div class=\"ds-mosaic\"><span class=\"ds-tile ds-t-lapis\"></span><span class=\"ds-tile ds-t-lapis ds-overdue\"></span><span class=\"ds-tile ds-t-jade\"></span></div>",
+      "css": ".ds-mosaic { display: flex; gap: 10px; padding: 8px; background: #fafaf8; } .ds-tile { width: 28px; height: 28px; border-radius: 3px; box-shadow: 0 0 0 2px #fafaf8, 0 0 0 4px #2d3a92; transition: transform 150ms; } .ds-tile:hover { transform: scale(1.1); } .ds-t-lapis { background-color: #2d3a92; background-image: linear-gradient(90deg, transparent 38%, #f1efe6 38% 62%, transparent 62%), linear-gradient(transparent 38%, #f1efe6 38% 62%, transparent 62%); background-size: 12px 12px; } .ds-t-jade { background-color: #0f6b6b; background-image: linear-gradient(135deg, #f1efe6 25%, transparent 25%), linear-gradient(225deg, #f1efe6 25%, transparent 25%); background-size: 14px 14px; box-shadow: 0 0 0 2px #fafaf8, 0 0 0 4px #0f6b6b; } .ds-overdue { box-shadow: 0 0 0 2px #fafaf8, 0 0 0 4px #b8402a; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Encaustic Tile Floor",
+    "overview": "The system takes its world from Vietnamese cement tile (gạch bông). The ground is a cool cement grey, the navigation rail is a deep peacock teal, and every department owns one geometric tile pattern drawn from plain CSS gradients. Workload is shown as tiles laid in rows, not as bars or charts. It is a working queue tool: dense, quiet, hairline-ruled, with tabular numerals, and it refuses the grey-screen-with-one-accent SaaS default.",
+    "keyCharacteristics": [
+      "Cement-grey canvas with near-white surface panels separated by hairline rules, not shadows.",
+      "Deep teal rail at the left on desktop, collapsing to a top band on mobile.",
+      "Eight department tile patterns used as swatches, a border band, and workload squares.",
+      "Status is a tinted chip or a coloured ring; priority is an outline; \"mine\" is purple.",
+      "No icons or glyphs anywhere; meaning is carried by words, pattern, and colour."
+    ],
+    "rules": [
+      { "name": "The Reserved Purple Rule", "body": "Purple appears only to say \"this waits on you\". It never decorates, never marks a status, and never appears on a department.", "section": "colors" },
+      { "name": "The Status Is Not Priority Rule", "body": "Status is a tinted fill chip; priority is an outline ring (1px neutral for low and medium, 2px ochre for high, 2px brick for urgent). The two must never both read as fills.", "section": "colors" },
+      { "name": "The Small And Plain Rule", "body": "Text is 0.75rem or 0.875rem for almost everything. Size jumps are reserved for page titles. Do not set uppercase, letter-spaced label text above headings.", "section": "typography" },
+      { "name": "The Hairline Not Shadow Rule", "body": "Separate regions with a 1px line or a tonal step. Shadows are not part of the built system.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do write the department name beside any tile swatch; the tile is a mark, not a label.",
+      "Do keep status as tinted chips and priority as outline rings.",
+      "Do reserve purple (mine-600 family) for work waiting on the viewer, at badge, row-tint, and nav-count level only.",
+      "Do use hairline borders and tonal steps to separate regions.",
+      "Do keep numerals tabular and text at 0.75rem or 0.875rem except page titles.",
+      "Do label mock data as replaceable wherever it is shown (the viewer switcher carries the sample-data note).",
+      "Do build any new pattern from plain CSS gradients on a flat ground and ink pair."
+    ],
+    "donts": [
+      "Don't use icons, glyphs, or emoji; meaning is words, pattern, and colour.",
+      "Don't introduce a ninth hue or reuse purple for anything but \"waiting on me\".",
+      "Don't use a pale single-accent grey SaaS layout, gradient text, or heavy drop shadows.",
+      "Don't use circles or pills for workload marks; tiles are squares with small corners.",
+      "Don't colour a department by status or a status by department; pattern says department, ring or chip says status."
+    ]
+  }
+}
