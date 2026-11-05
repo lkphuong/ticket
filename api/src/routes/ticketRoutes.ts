@@ -6,6 +6,7 @@ import {
   canViewTicket,
   filterTickets,
   filterVisibleTickets,
+  generateTicketsCsv,
   getTicketPermissions,
 } from '@vtdesk/domain'
 import type {
@@ -130,6 +131,48 @@ export function createTicketRouter(
       res.status(500).json({
         error: 'InternalError',
         message: err.message || 'Unable to retrieve tickets.',
+      })
+    }
+  })
+
+  // Exports filtered visible tickets to CSV with UTF-8 BOM
+  router.get('/export', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const viewer = toDomainViewer(req.viewer)
+      const allTickets = await store.tickets.findAll()
+
+      // 1. Enforce strict authorization visibility boundaries
+      const visibleTickets = filterVisibleTickets(allTickets, viewer)
+
+      // 2. Parse query parameters into domain TicketFilters matching the list API
+      const filters: TicketFilters = {
+        scope: (req.query.scope as TicketScope) || 'all',
+        query: (req.query.query as string) || '',
+        status: (req.query.status as TicketStatus | 'all') || 'all',
+        priority: (req.query.priority as TicketPriority | 'all') || 'all',
+        department: (req.query.department as Department | 'all') || 'all',
+        fromDepartment: (req.query.fromDepartment as Department | 'all') || 'all',
+        createdFrom: (req.query.createdFrom as string) || '',
+        createdTo: (req.query.createdTo as string) || '',
+        due: (req.query.due as any) || 'all',
+        assignment: (req.query.assignment as any) || 'all',
+        assigneeName: (req.query.assigneeName as string) || '',
+        sort: (req.query.sort as TicketSort) || 'updated_desc',
+      }
+
+      // 3. Apply pure domain filtering and ordering
+      const filteredTickets = filterTickets(visibleTickets, filters, viewer)
+
+      // 4. Generate CSV payload with UTF-8 BOM
+      const csvPayload = generateTicketsCsv(filteredTickets)
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+      res.setHeader('Content-Disposition', 'attachment; filename="tickets.csv"')
+      res.status(200).send(csvPayload)
+    } catch (err: any) {
+      res.status(500).json({
+        error: 'InternalError',
+        message: err.message || 'Unable to export tickets.',
       })
     }
   })
