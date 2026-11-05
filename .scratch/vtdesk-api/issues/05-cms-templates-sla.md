@@ -4,10 +4,20 @@
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Nhân viên và Trưởng phòng đọc được danh sách mẫu đang hoạt động, chỉ Quản trị sửa được
-- [ ] Sửa mẫu hoặc SLA không đổi Ticket đã tạo
-- [ ] Mẫu ràng buộc phòng tiếp nhận hợp lệ, mẫu cấm gửi đến chính phòng gửi được thể hiện
-- [ ] SLA mặc định theo mức ưu tiên được lưu và đọc đúng
-- [ ] Có dòng nhật ký kiểm toán cho mỗi thay đổi
+- [x] Nhân viên và Trưởng phòng đọc được danh sách mẫu đang hoạt động, chỉ Quản trị sửa được
+- [x] Sửa mẫu hoặc SLA không đổi Ticket đã tạo
+- [x] Mẫu ràng buộc phòng tiếp nhận hợp lệ, mẫu cấm gửi đến chính phòng gửi được thể hiện
+- [x] SLA mặc định theo mức ưu tiên được lưu và đọc đúng
+- [x] Có dòng nhật ký kiểm toán cho mỗi thay đổi
+
+## Answer
+
+Da hoan thanh tinh nang CMS quan ly mau yeu cau va SLA mac dinh:
+- Cung cap endpoint GET /api/templates va GET /api/slas cho moi nguoi dung da dang nhap (Nhan vien, Truong phong, Quan tri) doc danh sach dang hoat dong.
+- Chi Quan tri duoc phep tao moi (/api/cms/templates), cap nhat mau yeu cau va cap nhat thoi gian SLA (/api/cms/slas/:priority) qua guard requireRoles('admin').
+- Rang buoc chat che phong tiep nhan hop le khi tao/cap nhat mau yeu cau.
+- Thao tac cap nhat mau hoac SLA khong lam anh huong den snapshot cua cac Ticket da duoc tao truoc do.
+- Tu dong ghi log vao audit_logs cho moi thao tac them, sua mau va cap nhat thong so SLA.
+- Toan bo test trong api/src/routes/cmsTemplatesSla.test.ts pass 100%.

@@ -156,5 +156,63 @@ export function createCmsRouter(cmsService: CmsService, authMiddleware: any): Ro
     res.status(200).json({ auditLogs: logs })
   })
 
+  // Template management (Admin only)
+  router.get('/templates', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const department = req.query.department as string | undefined
+    const templates = await cmsService.listTemplates(department, true)
+    res.status(200).json({ templates })
+  })
+
+  router.post('/templates', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const template = await cmsService.createTemplate(req.viewer!, req.body ?? {})
+      res.status(201).json({ status: 'ok', template })
+    } catch (err) {
+      if (err instanceof CmsValidationError) {
+        res.status(400).json({ error: 'ValidationError', message: err.message })
+        return
+      }
+      res.status(500).json({ error: 'InternalError', message: 'Không thể tạo mẫu yêu cầu.' })
+    }
+  })
+
+  router.put('/templates/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const template = await cmsService.updateTemplate(req.viewer!, req.params.id, req.body ?? {})
+      res.status(200).json({ status: 'ok', template })
+    } catch (err) {
+      if (err instanceof CmsValidationError) {
+        res.status(400).json({ error: 'ValidationError', message: err.message })
+        return
+      }
+      res.status(500).json({ error: 'InternalError', message: 'Không thể cập nhật mẫu yêu cầu.' })
+    }
+  })
+
+  // Default SLA management (Admin only)
+  router.get('/slas', async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const slas = await cmsService.listDefaultSlas()
+    res.status(200).json({ slas })
+  })
+
+  router.put('/slas/:priority', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { responseHours, resolutionHours } = req.body ?? {}
+      const updated = await cmsService.updateDefaultSla(
+        req.viewer!,
+        req.params.priority,
+        Number(responseHours),
+        Number(resolutionHours),
+      )
+      res.status(200).json({ status: 'ok', sla: updated })
+    } catch (err) {
+      if (err instanceof CmsValidationError) {
+        res.status(400).json({ error: 'ValidationError', message: err.message })
+        return
+      }
+      res.status(500).json({ error: 'InternalError', message: 'Không thể cập nhật SLA mặc định.' })
+    }
+  })
+
   return router
 }

@@ -3,6 +3,7 @@ import type { Department, Ticket, TicketAssignmentChange, TicketAttachment, Tick
 import * as schema from '../db/schema.ts'
 import type {
   DbAuditLog,
+  DbDefaultSla,
   DbMember,
   DbNotification,
   DbRequestTemplate,
@@ -10,6 +11,7 @@ import type {
   IDepartmentRepository,
   IMemberRepository,
   INotificationRepository,
+  ISlaRepository,
   ITemplateRepository,
   ITicketRepository,
   ITicketStore,
@@ -347,6 +349,44 @@ export class PostgresTemplateRepository implements ITemplateRepository {
   }
 }
 
+export class PostgresSlaRepository implements ISlaRepository {
+  constructor(private readonly db: AnyDrizzleDb) {}
+
+  async findAll(): Promise<DbDefaultSla[]> {
+    const rows = await this.db.select().from(schema.defaultSlas)
+    return rows.map((r: any) => ({
+      priority: r.priority,
+      responseHours: r.responseHours,
+      resolutionHours: r.resolutionHours,
+    }))
+  }
+
+  async findByPriority(priority: string): Promise<DbDefaultSla | null> {
+    const rows = await this.db.select().from(schema.defaultSlas).where(eq(schema.defaultSlas.priority, priority))
+    if (rows.length === 0) return null
+    return {
+      priority: rows[0].priority,
+      responseHours: rows[0].responseHours,
+      resolutionHours: rows[0].resolutionHours,
+    }
+  }
+
+  async save(sla: DbDefaultSla): Promise<void> {
+    const existing = await this.db.select().from(schema.defaultSlas).where(eq(schema.defaultSlas.priority, sla.priority))
+    const values = {
+      priority: sla.priority,
+      responseHours: sla.responseHours,
+      resolutionHours: sla.resolutionHours,
+      updatedAt: new Date(),
+    }
+    if (existing.length === 0) {
+      await this.db.insert(schema.defaultSlas).values(values)
+    } else {
+      await this.db.update(schema.defaultSlas).set(values).where(eq(schema.defaultSlas.priority, sla.priority))
+    }
+  }
+}
+
 export class PostgresNotificationRepository implements INotificationRepository {
   constructor(private readonly db: AnyDrizzleDb) {}
 
@@ -426,6 +466,7 @@ export class PostgresTicketStore implements ITicketStore {
   readonly members: PostgresMemberRepository
   readonly departments: PostgresDepartmentRepository
   readonly templates: PostgresTemplateRepository
+  readonly slas: PostgresSlaRepository
   readonly notifications: PostgresNotificationRepository
   readonly auditLogs: PostgresAuditLogRepository
 
@@ -434,6 +475,7 @@ export class PostgresTicketStore implements ITicketStore {
     this.members = new PostgresMemberRepository(db)
     this.departments = new PostgresDepartmentRepository(db)
     this.templates = new PostgresTemplateRepository(db)
+    this.slas = new PostgresSlaRepository(db)
     this.notifications = new PostgresNotificationRepository(db)
     this.auditLogs = new PostgresAuditLogRepository(db)
   }

@@ -58,7 +58,13 @@ export async function seedDatabase(store: ITicketStore, now: Date = new Date()):
     })
   }
 
-  // 6. Seed mock tickets with relative dates covering every department, status and priority
+  // 6. Seed default SLA parameters per priority
+  await store.slas.save({ priority: 'urgent', responseHours: 1, resolutionHours: 4 })
+  await store.slas.save({ priority: 'high', responseHours: 4, resolutionHours: 24 })
+  await store.slas.save({ priority: 'medium', responseHours: 8, resolutionHours: 72 })
+  await store.slas.save({ priority: 'low', responseHours: 24, resolutionHours: 120 })
+
+  // 7. Seed mock tickets with relative dates covering every department, status and priority
   const mockTickets = buildMockTickets(now)
   for (const ticket of mockTickets) {
     await store.tickets.save(ticket)

@@ -85,12 +85,25 @@ export interface IAuditLogRepository {
   save(log: DbAuditLog): Promise<void>
 }
 
+export interface DbDefaultSla {
+  readonly priority: string
+  readonly responseHours: number
+  readonly resolutionHours: number
+}
+
+export interface ISlaRepository {
+  findAll(): Promise<DbDefaultSla[]>
+  findByPriority(priority: string): Promise<DbDefaultSla | null>
+  save(sla: DbDefaultSla): Promise<void>
+}
+
 // Unified repository store facade separating domain operations from persistence driver
 export interface ITicketStore {
   tickets: ITicketRepository
   members: IMemberRepository
   departments: IDepartmentRepository
   templates: ITemplateRepository
+  slas: ISlaRepository
   notifications: INotificationRepository
   auditLogs: IAuditLogRepository
 }
