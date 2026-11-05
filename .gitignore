@@ -6,3 +6,4 @@ dist-ssr
 .codegraph
 .vitest
 web/.vitest
+.worktrees
