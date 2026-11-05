@@ -4,12 +4,12 @@
 
 **Blocked by:** 10
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Không nghiệm thu được Ticket chưa ở Đã xử lý
-- [ ] CSAT ngoài 1 đến 5 hoặc không nguyên bị từ chối
-- [ ] Làm lại và mở lại giữ người được giao và toàn bộ lịch sử
-- [ ] Mở lại sau 7 ngày kể từ lúc đóng bị từ chối, hằng số thời hạn có tên rõ ràng
-- [ ] Ticket đã hủy không mở lại được và hiển thị lý do
-- [ ] Hủy thiếu lý do bị từ chối
-- [ ] Trưởng phòng thấy CSAT và ghi chú của Ticket phòng mình
+- [x] Không nghiệm thu được Ticket chưa ở Đã xử lý
+- [x] CSAT ngoài 1 đến 5 hoặc không nguyên bị từ chối
+- [x] Làm lại và mở lại giữ người được giao và toàn bộ lịch sử
+- [x] Mở lại sau 7 ngày kể từ lúc đóng bị từ chối, hằng số thời hạn có tên rõ ràng
+- [x] Ticket đã hủy không mở lại được và hiển thị lý do
+- [x] Hủy thiếu lý do bị từ chối
+- [x] Trưởng phòng thấy CSAT và ghi chú của Ticket phòng mình

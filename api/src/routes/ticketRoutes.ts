@@ -328,5 +328,121 @@ export function createTicketRouter(
     }
   })
 
+  // Confirms ticket resolution, sets CSAT rating and feedback (Requester only)
+  router.post('/:id/confirm', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const member = req.viewer
+      if (!member) {
+        res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' })
+        return
+      }
+
+      const { rating, feedback } = req.body
+      const ticket = await ticketService.confirmTicket(req.params.id, rating, feedback, member)
+      res.status(200).json({ ticket })
+    } catch (err: any) {
+      if (err instanceof TicketNotFoundError) {
+        res.status(404).json({ error: 'NotFound', message: err.message })
+        return
+      }
+      if (err instanceof TicketAuthorizationError) {
+        res.status(403).json({ error: 'Forbidden', message: err.message })
+        return
+      }
+      if (err instanceof TicketValidationError) {
+        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
+        return
+      }
+      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to confirm ticket.' })
+    }
+  })
+
+  // Requests rework on a resolved ticket (Requester only)
+  router.post('/:id/rework', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const member = req.viewer
+      if (!member) {
+        res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' })
+        return
+      }
+
+      const { reason } = req.body
+      const ticket = await ticketService.reworkTicket(req.params.id, reason, member)
+      res.status(200).json({ ticket })
+    } catch (err: any) {
+      if (err instanceof TicketNotFoundError) {
+        res.status(404).json({ error: 'NotFound', message: err.message })
+        return
+      }
+      if (err instanceof TicketAuthorizationError) {
+        res.status(403).json({ error: 'Forbidden', message: err.message })
+        return
+      }
+      if (err instanceof TicketValidationError) {
+        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
+        return
+      }
+      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to request rework.' })
+    }
+  })
+
+  // Reopens a closed ticket within 7-day limit (Requester only)
+  router.post('/:id/reopen', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const member = req.viewer
+      if (!member) {
+        res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' })
+        return
+      }
+
+      const { reason } = req.body
+      const ticket = await ticketService.reopenTicket(req.params.id, reason, member)
+      res.status(200).json({ ticket })
+    } catch (err: any) {
+      if (err instanceof TicketNotFoundError) {
+        res.status(404).json({ error: 'NotFound', message: err.message })
+        return
+      }
+      if (err instanceof TicketAuthorizationError) {
+        res.status(403).json({ error: 'Forbidden', message: err.message })
+        return
+      }
+      if (err instanceof TicketValidationError) {
+        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
+        return
+      }
+      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to reopen ticket.' })
+    }
+  })
+
+  // Cancels an active ticket with mandatory reason (Requester or Receiving Head)
+  router.post('/:id/cancel', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const member = req.viewer
+      if (!member) {
+        res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' })
+        return
+      }
+
+      const { reason } = req.body
+      const ticket = await ticketService.cancelTicket(req.params.id, reason, member)
+      res.status(200).json({ ticket })
+    } catch (err: any) {
+      if (err instanceof TicketNotFoundError) {
+        res.status(404).json({ error: 'NotFound', message: err.message })
+        return
+      }
+      if (err instanceof TicketAuthorizationError) {
+        res.status(403).json({ error: 'Forbidden', message: err.message })
+        return
+      }
+      if (err instanceof TicketValidationError) {
+        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
+        return
+      }
+      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to cancel ticket.' })
+    }
+  })
+
   return router
 }

@@ -10,6 +10,9 @@ export const STATUS_TRANSITIONS: Record<TicketStatus, readonly TicketStatus[]> =
   closed: ['in_progress'],
 }
 
+// Maximum allowable calendar window for reopening a normally closed ticket
+export const REOPEN_MAX_DAYS = 7
+
 export function canTransition(from: TicketStatus, to: TicketStatus): boolean {
   return STATUS_TRANSITIONS[from].includes(to)
 }
