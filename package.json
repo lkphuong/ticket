@@ -1,0 +1,21 @@
+{
+  "name": "vtdesk",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "web",
+    "api"
+  ],
+  "scripts": {
+    "dev:web": "bun --filter web dev",
+    "dev:api": "bun --filter api dev",
+    "build": "bun run --filter '*' build",
+    "test": "bun test",
+    "lint": "oxlint web/src packages/domain/src api/src"
+  },
+  "devDependencies": {
+    "bun-types": "^1.4.4",
+    "oxlint": "^1.91.0",
+    "typescript": "^7.0.2"
+  }
+}

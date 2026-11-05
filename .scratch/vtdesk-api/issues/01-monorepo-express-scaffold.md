@@ -4,10 +4,20 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Web và API cùng import nghiệp vụ từ gói dùng chung, không chép logic
-- [ ] Toàn bộ test web hiện có vẫn xanh sau khi chuyển
-- [ ] Endpoint health trả 200 và có test
-- [ ] Lockfile và phiên bản được ghim
-- [ ] CI chạy lint, test và build
+- [x] Web và API cùng import nghiệp vụ từ gói dùng chung, không chép logic
+- [x] Toàn bộ test web hiện có vẫn xanh sau khi chuyển
+- [x] Endpoint health trả 200 và có test
+- [x] Lockfile và phiên bản được ghim
+- [x] CI chạy lint, test và build
+
+## Answer
+
+Da chuyen doi repository thanh Bun monorepo workspaces:
+- Goi packages/domain chua toan bo domain types, state reducer, rules (SLA, permissions, visibility, timeline, filters, validation, formatters, seed fixtures).
+- Goi web chuyen sang phu thuoc vao @vtdesk/domain, toan bo 235 tests hien huu tiep tuc vuot qua 100%.
+- Goi api dung khung Express tren Bun, phu thuoc vao @vtdesk/domain, co endpoint GET /health tra ve HTTP 200 kem test day du.
+- Cau hinh moi truong tai api/src/config/environment.ts ho tro cac che do development, staging, production voi kiem tra hop le chat che.
+- Khoa lockfile bun.lock duoc ghim phien ban.
+- Thiet lap GitHub Actions CI tai .github/workflows/ci.yml thuc thi lint, test va build.
