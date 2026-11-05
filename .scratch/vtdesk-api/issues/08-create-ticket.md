@@ -4,11 +4,11 @@
 
 **Blocked by:** 05, 06
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Mã Ticket là duy nhất dù tạo đồng thời
-- [ ] Lỗi kiểm tra trả đủ ngữ cảnh theo từng trường
-- [ ] Mẫu cấm gửi đến chính phòng mình được tuân thủ
-- [ ] Hạn chót mặc định lấy từ SLA theo ưu tiên khi người gửi không đặt
-- [ ] Ticket lưu snapshot phòng gửi và phòng tiếp nhận tại thời điểm tạo
-- [ ] Quản trị không tạo được Ticket
+- [x] Mã Ticket là duy nhất dù tạo đồng thời
+- [x] Lỗi kiểm tra trả đủ ngữ cảnh theo từng trường
+- [x] Mẫu cấm gửi đến chính phòng mình được tuân thủ
+- [x] Hạn chót mặc định lấy từ SLA theo ưu tiên khi người gửi không đặt
+- [x] Ticket lưu snapshot phòng gửi và phòng tiếp nhận tại thời điểm tạo
+- [x] Quản trị không tạo được Ticket
