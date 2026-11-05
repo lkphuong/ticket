@@ -13,12 +13,16 @@
   },
   "dependencies": {
     "@vtdesk/domain": "workspace:*",
-    "express": "4.21.2"
+    "drizzle-orm": "^0.45.4",
+    "express": "4.21.2",
+    "postgres": "^4.0.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.15",
     "@types/express": "4.17.21",
     "@types/node": "^24.19.2",
     "@types/supertest": "^6.0.2",
+    "drizzle-kit": "^0.31.11",
     "oxlint": "^1.89.0",
     "supertest": "^7.0.0",
     "typescript": "~7.0.2"
