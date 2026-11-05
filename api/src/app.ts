@@ -13,6 +13,7 @@ import { createCmsRouter } from './routes/cmsRoutes.ts'
 import { createHealthRouter } from './routes/health.ts'
 import { createNotificationRouter } from './routes/notificationRoutes.ts'
 import { createTicketRouter } from './routes/ticketRoutes.ts'
+import { DeadlineService } from './notifications/deadlineService.ts'
 import { NotificationService } from './notifications/notificationService.ts'
 import { FirebasePushGateway, type IPushGateway } from './notifications/pushGateway.ts'
 import { TicketService } from './tickets/ticketService.ts'
@@ -24,6 +25,7 @@ export interface AppDependencies {
   readonly cmsService?: CmsService
   readonly pushGateway?: IPushGateway
   readonly notificationService?: NotificationService
+  readonly deadlineService?: DeadlineService
   readonly ticketService?: TicketService
 }
 
@@ -37,6 +39,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
   const cmsService = deps.cmsService ?? new CmsService(store)
   const pushGateway = deps.pushGateway ?? new FirebasePushGateway()
   const notificationService = deps.notificationService ?? new NotificationService(store, undefined, () => new Date(), pushGateway)
+  const deadlineService = deps.deadlineService ?? new DeadlineService(store, notificationService)
   const ticketService = deps.ticketService ?? new TicketService(store, () => new Date(), notificationService)
   const authMiddleware = createAuthMiddleware(sessionService, store.members)
 
@@ -68,7 +71,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
   app.use('/api/tickets', createTicketRouter(store, authMiddleware, ticketService))
 
   // In-app notification routing
-  app.use('/api/notifications', createNotificationRouter(notificationService, authMiddleware))
+  app.use('/api/notifications', createNotificationRouter(notificationService, authMiddleware, deadlineService))
 
   // Explicit catch-all handler for undefined routes
   app.use((_req: Request, res: Response) => {

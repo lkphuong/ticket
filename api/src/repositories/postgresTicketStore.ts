@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { Department, Ticket, TicketAssignmentChange, TicketAttachment, TicketComment, TicketPriority, TicketStatus, TicketStatusChange } from '@vtdesk/domain'
 import * as schema from '../db/schema.ts'
 import type {
@@ -394,6 +394,24 @@ export class PostgresNotificationRepository implements INotificationRepository {
 
   async findByRecipient(recipientUsername: string): Promise<DbNotification[]> {
     const rows = await this.db.select().from(schema.notifications).where(eq(schema.notifications.recipientUsername, recipientUsername))
+    return rows.map((r: any) => ({
+      id: r.id,
+      recipientUsername: r.recipientUsername,
+      ticketId: r.ticketId ?? undefined,
+      type: r.type,
+      title: r.title,
+      body: r.body,
+      isRead: r.isRead,
+      createdAt: r.createdAt,
+    }))
+  }
+
+  async findByTicketAndType(ticketId: string, type: string): Promise<DbNotification[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.notifications)
+      .where(and(eq(schema.notifications.ticketId, ticketId), eq(schema.notifications.type, type)))
+
     return rows.map((r: any) => ({
       id: r.id,
       recipientUsername: r.recipientUsername,

@@ -75,6 +75,7 @@ export interface ITemplateRepository {
 
 export interface INotificationRepository {
   findByRecipient(recipientUsername: string): Promise<DbNotification[]>
+  findByTicketAndType(ticketId: string, type: string): Promise<DbNotification[]>
   save(notification: DbNotification): Promise<void>
   markAsRead(id: string): Promise<void>
   markAllAsRead(recipientUsername: string): Promise<void>

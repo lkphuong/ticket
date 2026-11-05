@@ -65,6 +65,14 @@ export type TicketDomainEvent =
       actorUsername: string
       reason: string
     }
+  | {
+      type: 'deadline_impending'
+      ticket: Ticket
+    }
+  | {
+      type: 'deadline_overdue'
+      ticket: Ticket
+    }
 
 export class NotificationService {
   constructor(
@@ -263,6 +271,52 @@ export class NotificationService {
               title: 'Yêu cầu đã bị từ chối / hủy',
               body: `[${ticket.id}] ${ticket.title} - Lý do: ${event.reason}`,
             })
+          }
+          break
+        }
+
+        case 'deadline_impending': {
+          const head = findReceivingHead(ticket.toDepartment)
+          if (head) {
+            targetRecipients.push({
+              username: head.username,
+              title: 'Ticket sắp đến hạn',
+              body: `[${ticket.id}] ${ticket.title} còn 1 ngày đến hạn xử lý (${ticket.dueDate})`,
+            })
+          }
+
+          if (ticket.assigneeName) {
+            const assignee = findMemberByName(ticket.assigneeName)
+            if (assignee && assignee.username !== head?.username) {
+              targetRecipients.push({
+                username: assignee.username,
+                title: 'Ticket sắp đến hạn',
+                body: `[${ticket.id}] ${ticket.title} còn 1 ngày đến hạn xử lý (${ticket.dueDate})`,
+              })
+            }
+          }
+          break
+        }
+
+        case 'deadline_overdue': {
+          const head = findReceivingHead(ticket.toDepartment)
+          if (head) {
+            targetRecipients.push({
+              username: head.username,
+              title: 'Ticket đã quá hạn',
+              body: `[${ticket.id}] ${ticket.title} đã quá hạn xử lý (${ticket.dueDate})`,
+            })
+          }
+
+          if (ticket.assigneeName) {
+            const assignee = findMemberByName(ticket.assigneeName)
+            if (assignee && assignee.username !== head?.username) {
+              targetRecipients.push({
+                username: assignee.username,
+                title: 'Ticket đã quá hạn',
+                body: `[${ticket.id}] ${ticket.title} đã quá hạn xử lý (${ticket.dueDate})`,
+              })
+            }
           }
           break
         }

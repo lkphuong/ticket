@@ -1,9 +1,14 @@
 import { Router } from 'express'
 import type { Response } from 'express'
 import type { AuthenticatedRequest } from '../middleware/authMiddleware.ts'
+import type { DeadlineService } from '../notifications/deadlineService.ts'
 import type { NotificationService } from '../notifications/notificationService.ts'
 
-export function createNotificationRouter(notificationService: NotificationService, authMiddleware: any): Router {
+export function createNotificationRouter(
+  notificationService: NotificationService,
+  authMiddleware: any,
+  deadlineService?: DeadlineService,
+): Router {
   const router = Router()
 
   router.use(authMiddleware)
@@ -100,6 +105,30 @@ export function createNotificationRouter(notificationService: NotificationServic
       res.status(500).json({
         error: 'InternalError',
         message: err.message || 'Unable to unregister device token.',
+      })
+    }
+  })
+
+  // Triggers immediate deadline inspection across active tickets
+  router.post('/check-deadlines', async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      if (!deadlineService) {
+        res.status(400).json({
+          error: 'NotConfigured',
+          message: 'Deadline monitoring service is not configured.',
+        })
+        return
+      }
+
+      const result = await deadlineService.checkDeadlines()
+      res.status(200).json({
+        status: 'ok',
+        ...result,
+      })
+    } catch (err: any) {
+      res.status(500).json({
+        error: 'InternalError',
+        message: err.message || 'Unable to execute deadline check.',
       })
     }
   })

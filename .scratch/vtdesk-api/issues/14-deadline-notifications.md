@@ -4,10 +4,10 @@
 
 **Blocked by:** 12
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Mỗi Ticket nhận mỗi loại cảnh báo đúng một lần dù tiến trình chạy lặp
-- [ ] Ticket không đặt hạn và Ticket đã đóng không sinh cảnh báo
-- [ ] Ticket đang Chờ phản hồi không bị tính quá hạn trong thời gian tạm dừng
-- [ ] Đồng hồ được tiêm để test được các biên hôm nay, quá hạn
-- [ ] Ticket chưa được phân công thì cảnh báo đi tới Trưởng phòng tiếp nhận
+- [x] Mỗi Ticket nhận mỗi loại cảnh báo đúng một lần dù tiến trình chạy lặp
+- [x] Ticket không đặt hạn và Ticket đã đóng không sinh cảnh báo
+- [x] Ticket đang Chờ phản hồi không bị tính quá hạn trong thời gian tạm dừng
+- [x] Đồng hồ được tiêm để test được các biên hôm nay, quá hạn
+- [x] Ticket chưa được phân công thì cảnh báo đi tới Trưởng phòng tiếp nhận
