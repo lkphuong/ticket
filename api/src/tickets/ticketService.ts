@@ -23,6 +23,7 @@ import type {
   Viewer,
 } from '@vtdesk/domain'
 import type { ITicketStore } from '../repositories/interfaces.ts'
+import type { NotificationService, TicketDomainEvent } from '../notifications/notificationService.ts'
 
 export interface CreateTicketInput {
   readonly title: string
@@ -40,6 +41,7 @@ export interface CreateTicketInput {
 }
 
 export interface TicketCreator {
+  readonly username: string
   readonly name: string
   readonly department: string
   readonly role: 'staff' | 'head' | 'admin'
@@ -95,7 +97,21 @@ export class TicketService {
   constructor(
     private readonly store: ITicketStore,
     private readonly clock: () => Date = () => new Date(),
+    private readonly notificationService?: NotificationService,
   ) {}
+
+  // Dispatches domain notification events safely without failing caller transaction
+  private async safeDispatch(event: TicketDomainEvent): Promise<void> {
+    if (!this.notificationService) {
+      return
+    }
+    try {
+      await this.notificationService.dispatch(event)
+    } catch (err: unknown) {
+      // External notification failures must degrade gracefully to safeguard business transactions
+      console.error('Notification dispatch failed for event:', event.type, err)
+    }
+  }
 
   // Creates a validated work ticket and safely allocates an incremental sequential ID
   async createTicket(input: CreateTicketInput, creator: TicketCreator): Promise<Ticket> {
@@ -143,12 +159,20 @@ export class TicketService {
     }
 
     // 4. Guarantee atomic ID assignment under concurrent load
-    return await this.mutex.runExclusive(async () => {
+    const createdTicket = await this.mutex.runExclusive(async () => {
       const existing = await this.store.tickets.findAll()
       const newTicket = buildTicket(domainInput, domainViewer, existing, now)
       await this.store.tickets.save(newTicket)
       return newTicket
     })
+
+    await this.safeDispatch({
+      type: 'ticket_created',
+      ticket: createdTicket,
+      actorUsername: creator.username,
+    })
+
+    return createdTicket
   }
 
   // Assigns a specialist from the receiving department to handle the ticket
@@ -209,6 +233,13 @@ export class TicketService {
     }
 
     await this.store.tickets.save(updatedTicket)
+
+    await this.safeDispatch({
+      type: 'ticket_assigned',
+      ticket: updatedTicket,
+      actorUsername: creator.username,
+    })
+
     return updatedTicket
   }
 
@@ -388,6 +419,22 @@ export class TicketService {
     }
 
     await this.store.tickets.save(updatedTicket)
+
+    if (targetStatus === 'waiting') {
+      await this.safeDispatch({
+        type: 'status_waiting',
+        ticket: updatedTicket,
+        actorUsername: creator.username,
+        reason: questionOrReason,
+      })
+    } else if (targetStatus === 'resolved') {
+      await this.safeDispatch({
+        type: 'status_resolved',
+        ticket: updatedTicket,
+        actorUsername: creator.username,
+      })
+    }
+
     return updatedTicket
   }
 
@@ -486,6 +533,14 @@ export class TicketService {
     }
 
     await this.store.tickets.save(updatedTicket)
+
+    await this.safeDispatch({
+      type: 'comment_added',
+      ticket: updatedTicket,
+      commentAuthorUsername: creator.username,
+      body: comment.body,
+    })
+
     return { comment, ticket: updatedTicket }
   }
 
@@ -541,6 +596,14 @@ export class TicketService {
     }
 
     await this.store.tickets.save(updatedTicket)
+
+    await this.safeDispatch({
+      type: 'result_confirmed',
+      ticket: updatedTicket,
+      actorUsername: creator.username,
+      rating,
+    })
+
     return updatedTicket
   }
 
@@ -592,6 +655,14 @@ export class TicketService {
     }
 
     await this.store.tickets.save(updatedTicket)
+
+    await this.safeDispatch({
+      type: 'ticket_rework',
+      ticket: updatedTicket,
+      actorUsername: creator.username,
+      reason: trimmedReason,
+    })
+
     return updatedTicket
   }
 
@@ -664,6 +735,14 @@ export class TicketService {
     }
 
     await this.store.tickets.save(updatedTicket)
+
+    await this.safeDispatch({
+      type: 'ticket_reopened',
+      ticket: updatedTicket,
+      actorUsername: creator.username,
+      reason: trimmedReason,
+    })
+
     return updatedTicket
   }
 
@@ -721,6 +800,14 @@ export class TicketService {
     }
 
     await this.store.tickets.save(updatedTicket)
+
+    await this.safeDispatch({
+      type: 'ticket_cancelled',
+      ticket: updatedTicket,
+      actorUsername: creator.username,
+      reason: trimmedReason,
+    })
+
     return updatedTicket
   }
 }
