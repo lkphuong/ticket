@@ -4,10 +4,10 @@
 
 **Blocked by:** 08, 09, 10, 11
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Mỗi sự kiện sinh thông báo đúng người nhận theo bảng trong spec
-- [ ] Người tự thực hiện hành động không nhận thông báo của chính nó
-- [ ] Người dùng chỉ thấy thông báo của mình
-- [ ] Số chưa đọc đúng sau khi đánh dấu đã đọc và đọc tất cả
-- [ ] Việc sinh thông báo không làm hỏng hành động nghiệp vụ khi gặp lỗi và lỗi được ghi log có ngữ cảnh
+- [x] Mỗi sự kiện sinh thông báo đúng người nhận theo bảng trong spec
+- [x] Người tự thực hiện hành động không nhận thông báo của chính nó
+- [x] Người dùng chỉ thấy thông báo của mình
+- [x] Số chưa đọc đúng sau khi đánh dấu đã đọc và đọc tất cả
+- [x] Việc sinh thông báo không làm hỏng hành động nghiệp vụ khi gặp lỗi và lỗi được ghi log có ngữ cảnh

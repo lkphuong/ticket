@@ -11,7 +11,9 @@ import type { ITicketStore } from './repositories/interfaces.ts'
 import { createAuthRouter } from './routes/authRoutes.ts'
 import { createCmsRouter } from './routes/cmsRoutes.ts'
 import { createHealthRouter } from './routes/health.ts'
+import { createNotificationRouter } from './routes/notificationRoutes.ts'
 import { createTicketRouter } from './routes/ticketRoutes.ts'
+import { NotificationService } from './notifications/notificationService.ts'
 import { TicketService } from './tickets/ticketService.ts'
 
 export interface AppDependencies {
@@ -19,6 +21,7 @@ export interface AppDependencies {
   readonly sessionService?: ISessionService
   readonly authService?: AuthService
   readonly cmsService?: CmsService
+  readonly notificationService?: NotificationService
   readonly ticketService?: TicketService
 }
 
@@ -30,7 +33,8 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
   const sessionService = deps.sessionService ?? new MemorySessionService()
   const authService = deps.authService ?? new AuthService(store.members, sessionService)
   const cmsService = deps.cmsService ?? new CmsService(store)
-  const ticketService = deps.ticketService ?? new TicketService(store)
+  const notificationService = deps.notificationService ?? new NotificationService(store)
+  const ticketService = deps.ticketService ?? new TicketService(store, () => new Date(), notificationService)
   const authMiddleware = createAuthMiddleware(sessionService, store.members)
 
   // Standard JSON payload decoding
@@ -59,6 +63,9 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
 
   // Ticket processing and query routing
   app.use('/api/tickets', createTicketRouter(store, authMiddleware, ticketService))
+
+  // In-app notification routing
+  app.use('/api/notifications', createNotificationRouter(notificationService, authMiddleware))
 
   // Explicit catch-all handler for undefined routes
   app.use((_req: Request, res: Response) => {
