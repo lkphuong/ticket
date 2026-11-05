@@ -73,8 +73,8 @@ describe('shared visibility across list, dashboard and csv', () => {
     const filtered = filterTickets(visible, { ...DEFAULT_TICKET_FILTERS, priority: 'high' }, head, now)
     const csv = generateTicketsCsv(filtered)
     expect(csv.split('\r\n')).toHaveLength(filtered.length + 1)
-    for (const ticket of filtered) expect(csv).toContain(`"${ticket.id}"`)
-    for (const ticket of visible.filter((candidate) => candidate.priority !== 'high')) expect(csv).not.toContain(`"${ticket.id}"`)
+    for (const ticket of filtered) expect(csv).toContain(`"${ticket.code}"`)
+    for (const ticket of visible.filter((candidate) => candidate.priority !== 'high')) expect(csv).not.toContain(`"${ticket.code}"`)
   })
 })
 

@@ -53,6 +53,8 @@ export interface ITicketRepository {
   findAll(): Promise<Ticket[]>
   save(ticket: Ticket): Promise<void>
   delete(id: string): Promise<void>
+  // Reserves the next ticket code for a department prefix in the month of `now`
+  allocateCode(codePrefix: string, now: Date): Promise<string>
 }
 
 export interface IMemberRepository {
@@ -64,7 +66,8 @@ export interface IMemberRepository {
 
 export interface IDepartmentRepository {
   findAll(): Promise<string[]>
-  create(name: string): Promise<void>
+  findCodePrefix(name: string): Promise<string | null>
+  create(name: string, codePrefix: string): Promise<void>
 }
 
 export interface ITemplateRepository {

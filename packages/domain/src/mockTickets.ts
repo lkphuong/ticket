@@ -1,4 +1,9 @@
 import type { Ticket } from './ticket.ts'
+import { DEPARTMENT_CODE_PREFIXES, deterministicUuid, formatTicketCode, formatTicketPeriod } from './ticketCode.ts'
+
+// Draft rows keep a readable legacy key as id; it is converted to a stable uuid and a department code below
+type MockTicketDraft = Omit<Ticket, 'code'>
+const LEGACY_KEY_PATTERN = /TCK-\d{4}/g
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -7,7 +12,7 @@ export function buildMockTickets(now: Date): Ticket[] {
   const isoDaysFromNow = (offsetDays: number): string => new Date(now.getTime() + offsetDays * DAY_MS).toISOString()
   const dateOnlyDaysFromNow = (offsetDays: number): string => isoDaysFromNow(offsetDays).slice(0, 10)
 
-  return [
+  const drafts: MockTicketDraft[] = [
   {
     id: 'TCK-1010',
     title: 'Bổ sung giấy phép kinh doanh bản sao y cho hồ sơ thầu',
@@ -351,6 +356,34 @@ export function buildMockTickets(now: Date): Ticket[] {
     assignmentHistory: [{ to: 'Lê Thu Hà', at: isoDaysFromNow(-1) }],
   },
   ]
+
+  return assignCodesAndUuids(drafts)
+}
+
+// Codes follow creation order per receiving department and month, so they read like real allocations
+function assignCodesAndUuids(drafts: MockTicketDraft[]): Ticket[] {
+  const counters = new Map<string, number>()
+  const codeByLegacyKey = new Map<string, string>()
+  const chronological = [...drafts].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  for (const draft of chronological) {
+    const prefix = DEPARTMENT_CODE_PREFIXES[draft.toDepartment]
+    const period = formatTicketPeriod(new Date(draft.createdAt))
+    const counterKey = `${prefix}-${period}`
+    const sequence = (counters.get(counterKey) ?? 0) + 1
+    counters.set(counterKey, sequence)
+    codeByLegacyKey.set(draft.id, formatTicketCode(prefix, period, sequence))
+  }
+
+  // One serialization pass swaps every id for a stable uuid and every legacy key mentioned in text for its code
+  const rewritten = JSON.parse(
+    JSON.stringify(drafts, (key, value) => {
+      if (typeof value !== 'string') return value
+      if (key === 'id') return deterministicUuid(`mock:${value}`)
+      return value.replace(LEGACY_KEY_PATTERN, (legacyKey) => codeByLegacyKey.get(legacyKey) ?? legacyKey)
+    }),
+  ) as MockTicketDraft[]
+
+  return rewritten.map((draft, index) => ({ ...draft, code: codeByLegacyKey.get(drafts[index].id) as string }))
 }
 
 export const MOCK_TICKETS: Ticket[] = buildMockTickets(new Date())

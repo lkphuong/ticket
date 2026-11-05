@@ -30,7 +30,7 @@ export function generateTicketsCsv(tickets: Ticket[]): string {
   ]
 
   const dataRows = tickets.map((ticket) => [
-    escapeCsvCell(ticket.id),
+    escapeCsvCell(ticket.code),
     escapeCsvCell(ticket.title),
     escapeCsvCell(ticket.fromDepartment),
     escapeCsvCell(ticket.toDepartment),

@@ -1,3 +1,4 @@
+import { formatTicketCode, formatTicketPeriod, parseTicketCode } from '@vtdesk/domain'
 import type { Ticket } from '@vtdesk/domain'
 import type {
   DbAuditLog,
@@ -38,6 +39,15 @@ export class InMemoryTicketRepository implements ITicketRepository {
   async delete(id: string): Promise<void> {
     this.items.delete(id)
   }
+
+  async allocateCode(codePrefix: string, now: Date): Promise<string> {
+    const period = formatTicketPeriod(now)
+    const highest = Array.from(this.items.values()).reduce((max, ticket) => {
+      const parsed = parseTicketCode(ticket.code)
+      return parsed && parsed.prefix === codePrefix && parsed.period === period ? Math.max(max, parsed.sequence) : max
+    }, 0)
+    return formatTicketCode(codePrefix, period, highest + 1)
+  }
 }
 
 // In-memory implementation of member repository
@@ -70,14 +80,18 @@ export class InMemoryMemberRepository implements IMemberRepository {
 
 // In-memory implementation of department repository
 export class InMemoryDepartmentRepository implements IDepartmentRepository {
-  private readonly items = new Set<string>()
+  private readonly items = new Map<string, string>()
 
   async findAll(): Promise<string[]> {
-    return Array.from(this.items)
+    return Array.from(this.items.keys())
   }
 
-  async create(name: string): Promise<void> {
-    this.items.add(name)
+  async findCodePrefix(name: string): Promise<string | null> {
+    return this.items.get(name) ?? null
+  }
+
+  async create(name: string, codePrefix: string): Promise<void> {
+    if (!this.items.has(name)) this.items.set(name, codePrefix)
   }
 }
 

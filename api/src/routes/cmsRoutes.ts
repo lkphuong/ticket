@@ -19,8 +19,8 @@ export function createCmsRouter(cmsService: CmsService, authMiddleware: any): Ro
 
   router.post('/departments', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { name } = req.body ?? {}
-      await cmsService.createDepartment(req.viewer!, name)
+      const { name, codePrefix } = req.body ?? {}
+      await cmsService.createDepartment(req.viewer!, name, codePrefix)
       res.status(201).json({ status: 'ok', message: 'Phòng ban đã được tạo thành công.' })
     } catch (err) {
       if (err instanceof CmsValidationError) {

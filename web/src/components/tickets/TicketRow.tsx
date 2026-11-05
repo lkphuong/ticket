@@ -26,7 +26,7 @@ export function TicketRow({ ticket, now, waitingOnViewer }: TicketRowProps) {
       >
         <span className="min-w-[15rem] flex-1">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-xs font-bold tracking-wider text-ink-muted">{ticket.id}</span>
+            <span className="text-xs font-bold tracking-wider text-ink-muted">{ticket.code}</span>
             {waitingOnViewer && <MineBadge />}
             {ticket.assigneeName ? (
               <span className="text-[11px] font-medium text-ink-muted">

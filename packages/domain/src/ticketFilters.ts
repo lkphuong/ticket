@@ -57,6 +57,7 @@ function matchesQuery(ticket: Ticket, query: string): boolean {
   if (!needle) return true
   const fields = [
     ticket.id,
+    ticket.code,
     ticket.title,
     ticket.requesterName,
     ticket.description,

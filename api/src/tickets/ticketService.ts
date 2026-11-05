@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import {
   addDays,
   buildComment,
@@ -7,6 +8,7 @@ import {
   canEditPriority,
   canTransition,
   canViewTicket,
+  deriveDepartmentCodePrefix,
   isActiveTicket,
   REOPEN_MAX_DAYS,
   STATUS_LABELS,
@@ -160,8 +162,9 @@ export class TicketService {
 
     // 4. Guarantee atomic ID assignment under concurrent load
     const createdTicket = await this.mutex.runExclusive(async () => {
-      const existing = await this.store.tickets.findAll()
-      const newTicket = buildTicket(domainInput, domainViewer, existing, now)
+      const codePrefix = (await this.store.departments.findCodePrefix(domainInput.toDepartment)) ?? deriveDepartmentCodePrefix(domainInput.toDepartment)
+      const code = await this.store.tickets.allocateCode(codePrefix, now)
+      const newTicket = buildTicket(domainInput, domainViewer, { id: randomUUID(), code }, now)
       await this.store.tickets.save(newTicket)
       return newTicket
     })

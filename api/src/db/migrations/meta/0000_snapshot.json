@@ -1,5 +1,5 @@
 {
-  "id": "970ee84b-b156-4b25-acbe-a063b89340a1",
+  "id": "c1294eb1-8bbe-4e82-a5a2-0141d8f00869",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -10,9 +10,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "actor_username": {
           "name": "actor_username",
@@ -66,13 +67,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "comment_id": {
           "name": "comment_id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -166,6 +168,12 @@
           "primaryKey": true,
           "notNull": true
         },
+        "code_prefix": {
+          "name": "code_prefix",
+          "type": "varchar(12)",
+          "primaryKey": false,
+          "notNull": true
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -177,7 +185,62 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "departments_code_prefix_unique": {
+          "name": "departments_code_prefix_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code_prefix"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.device_tokens": {
+      "name": "device_tokens",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "username": {
+          "name": "username",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "device_tokens_token_unique": {
+          "name": "device_tokens_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -188,9 +251,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "username": {
           "name": "username",
@@ -307,9 +371,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "recipient_username": {
           "name": "recipient_username",
@@ -319,7 +384,7 @@
         },
         "ticket_id": {
           "name": "ticket_id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -369,9 +434,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "target_department": {
           "name": "target_department",
@@ -459,13 +525,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "ticket_id": {
           "name": "ticket_id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -528,13 +595,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "ticket_id": {
           "name": "ticket_id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -573,19 +641,59 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.ticket_code_counters": {
+      "name": "ticket_code_counters",
+      "schema": "",
+      "columns": {
+        "code_prefix": {
+          "name": "code_prefix",
+          "type": "varchar(12)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "period": {
+          "name": "period",
+          "type": "varchar(4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_sequence": {
+          "name": "last_sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "ticket_code_counters_code_prefix_period_pk": {
+          "name": "ticket_code_counters_code_prefix_period_pk",
+          "columns": [
+            "code_prefix",
+            "period"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.ticket_comments": {
       "name": "ticket_comments",
       "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "ticket_id": {
           "name": "ticket_id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -642,13 +750,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "ticket_id": {
           "name": "ticket_id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -711,8 +820,15 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(64)",
+          "type": "uuid",
           "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(40)",
+          "primaryKey": false,
           "notNull": true
         },
         "title": {
@@ -805,8 +921,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "created_at_updated": {
-          "name": "created_at_updated",
+        "updated_at": {
+          "name": "updated_at",
           "type": "varchar(64)",
           "primaryKey": false,
           "notNull": true
@@ -842,7 +958,15 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "tickets_code_unique": {
+          "name": "tickets_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

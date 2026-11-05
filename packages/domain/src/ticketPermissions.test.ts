@@ -14,6 +14,7 @@ import {
 function makeTicket(status: TicketStatus, overrides: Partial<Ticket> = {}): Ticket {
   return {
     id: 'TCK-1',
+    code: 'TCK-1',
     title: 'Mẫu',
     description: 'Mô tả mẫu cho ticket',
     priority: 'medium',

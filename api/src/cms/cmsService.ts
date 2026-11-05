@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto'
+import { deriveDepartmentCodePrefix } from '@vtdesk/domain'
 import type { SessionData } from '../auth/sessionService.ts'
 import type { DbAuditLog, DbMember, DbRequestTemplate, ITicketStore } from '../repositories/interfaces.ts'
+
+const CODE_PREFIX_PATTERN = /^[A-Z0-9]{2,8}$/
 
 export interface CreateMemberInput {
   readonly username: string
@@ -33,7 +36,7 @@ export class CmsService {
     return this.store.departments.findAll()
   }
 
-  async createDepartment(actor: SessionData, nameRaw: string): Promise<void> {
+  async createDepartment(actor: SessionData, nameRaw: string, codePrefixRaw?: string): Promise<void> {
     const name = nameRaw?.trim()
     if (!name) {
       throw new CmsValidationError('Tên phòng ban không được để trống.')
@@ -44,8 +47,18 @@ export class CmsService {
       throw new CmsValidationError('Phòng ban đã tồn tại.')
     }
 
-    await this.store.departments.create(name)
-    await this.recordAuditLog(actor, 'create_department', 'department', name, { name })
+    // Prefix defaults to the department initials so administrators are not forced to invent one
+    const codePrefix = (codePrefixRaw?.trim() || deriveDepartmentCodePrefix(name)).toUpperCase()
+    if (!CODE_PREFIX_PATTERN.test(codePrefix)) {
+      throw new CmsValidationError('Tiền tố mã phải gồm 2 đến 8 chữ cái hoặc số không dấu.')
+    }
+    const prefixOwners = await Promise.all(existing.map((department) => this.store.departments.findCodePrefix(department)))
+    if (prefixOwners.includes(codePrefix)) {
+      throw new CmsValidationError('Tiền tố mã đã được phòng ban khác sử dụng.')
+    }
+
+    await this.store.departments.create(name, codePrefix)
+    await this.recordAuditLog(actor, 'create_department', 'department', name, { name, codePrefix })
   }
 
   async listMembers(): Promise<DbMember[]> {
@@ -91,7 +104,7 @@ export class CmsService {
     const passwordHash = await Bun.password.hash(tempPassword, { algorithm: 'bcrypt', cost: 10 })
 
     const newMember: DbMember = {
-      id: `usr-${username}-${randomUUID().slice(0, 8)}`,
+      id: randomUUID(),
       username,
       name,
       department: input.department,
@@ -318,7 +331,7 @@ export class CmsService {
     }
 
     const template: DbRequestTemplate = {
-      id: `tpl-${randomUUID().slice(0, 8)}`,
+      id: randomUUID(),
       targetDepartment: input.targetDepartment,
       title: input.title.trim(),
       description: input.description.trim(),
@@ -416,7 +429,7 @@ export class CmsService {
     details: Record<string, unknown>,
   ): Promise<void> {
     await this.store.auditLogs.save({
-      id: `aud-${randomUUID().slice(0, 8)}`,
+      id: randomUUID(),
       actorUsername: actor.username,
       action,
       entityType,

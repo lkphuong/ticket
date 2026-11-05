@@ -1,14 +1,16 @@
-import { boolean, integer, pgTable, text, timestamp, varchar } from 'drizzle-orm/pg-core'
+import { boolean, integer, pgTable, primaryKey, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core'
 
 // Department registry holding canonical organization divisions
 export const departments = pgTable('departments', {
   name: text('name').primaryKey(),
+  // Uppercase prefix printed inside ticket codes, e.g. CNTT in TCK-CNTT-2611-001
+  codePrefix: varchar('code_prefix', { length: 12 }).notNull().unique(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
 // System accounts with authentication and authorization roles
 export const members = pgTable('members', {
-  id: varchar('id', { length: 64 }).primaryKey(),
+  id: uuid('id').primaryKey().defaultRandom(),
   username: varchar('username', { length: 64 }).notNull().unique(),
   name: text('name').notNull(),
   department: text('department').notNull().references(() => departments.name, { onDelete: 'restrict' }),
@@ -25,7 +27,9 @@ export const members = pgTable('members', {
 
 // Central Ticket entities representing work requests
 export const tickets = pgTable('tickets', {
-  id: varchar('id', { length: 64 }).primaryKey(),
+  id: uuid('id').primaryKey().defaultRandom(),
+  // Human readable code such as TCK-CNTT-2611-001
+  code: varchar('code', { length: 40 }).notNull().unique(),
   title: text('title').notNull(),
   description: text('description').notNull(),
   purpose: text('purpose'),
@@ -41,21 +45,32 @@ export const tickets = pgTable('tickets', {
   feedback: text('feedback'),
   cancelReason: text('cancel_reason'),
   createdAt: varchar('created_at', { length: 64 }).notNull(),
-  updatedAt: varchar('created_at_updated', { length: 64 }).notNull(),
+  updatedAt: varchar('updated_at', { length: 64 }).notNull(),
 })
+
+// Last allocated ticket sequence per receiving department and month (YYMM)
+export const ticketCodeCounters = pgTable(
+  'ticket_code_counters',
+  {
+    codePrefix: varchar('code_prefix', { length: 12 }).notNull(),
+    period: varchar('period', { length: 4 }).notNull(),
+    lastSequence: integer('last_sequence').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.codePrefix, table.period] })],
+)
 
 // File attachment metadata associated with tickets
 export const ticketAttachments = pgTable('ticket_attachments', {
-  id: varchar('id', { length: 64 }).primaryKey(),
-  ticketId: varchar('ticket_id', { length: 64 }).notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  id: uuid('id').primaryKey().defaultRandom(),
+  ticketId: uuid('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   sizeKb: integer('size_kb').notNull(),
 })
 
 // Discussion and clarification comments on tickets
 export const ticketComments = pgTable('ticket_comments', {
-  id: varchar('id', { length: 64 }).primaryKey(),
-  ticketId: varchar('ticket_id', { length: 64 }).notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  id: uuid('id').primaryKey().defaultRandom(),
+  ticketId: uuid('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
   author: text('author').notNull(),
   department: text('department').notNull(),
   body: text('body').notNull(),
@@ -64,16 +79,16 @@ export const ticketComments = pgTable('ticket_comments', {
 
 // File attachments uploaded inside comment threads
 export const commentAttachments = pgTable('comment_attachments', {
-  id: varchar('id', { length: 64 }).primaryKey(),
-  commentId: varchar('comment_id', { length: 64 }).notNull().references(() => ticketComments.id, { onDelete: 'cascade' }),
+  id: uuid('id').primaryKey().defaultRandom(),
+  commentId: uuid('comment_id').notNull().references(() => ticketComments.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   sizeKb: integer('size_kb').notNull(),
 })
 
 // Historical log of ticket lifecycle transitions
 export const ticketStatusHistory = pgTable('ticket_status_history', {
-  id: varchar('id', { length: 64 }).primaryKey(),
-  ticketId: varchar('ticket_id', { length: 64 }).notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  id: uuid('id').primaryKey().defaultRandom(),
+  ticketId: uuid('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
   status: varchar('status', { length: 20 }).notNull(),
   at: varchar('at', { length: 64 }).notNull(),
   reason: text('reason'),
@@ -83,8 +98,8 @@ export const ticketStatusHistory = pgTable('ticket_status_history', {
 
 // Historical log of specialist assignment changes
 export const ticketAssignmentHistory = pgTable('ticket_assignment_history', {
-  id: varchar('id', { length: 64 }).primaryKey(),
-  ticketId: varchar('ticket_id', { length: 64 }).notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  id: uuid('id').primaryKey().defaultRandom(),
+  ticketId: uuid('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
   fromAssignee: text('from_assignee'),
   toAssignee: text('to_assignee').notNull(),
   at: varchar('at', { length: 64 }).notNull(),
@@ -94,7 +109,7 @@ export const ticketAssignmentHistory = pgTable('ticket_assignment_history', {
 
 // Request templates configured by administrators
 export const requestTemplates = pgTable('request_templates', {
-  id: varchar('id', { length: 64 }).primaryKey(),
+  id: uuid('id').primaryKey().defaultRandom(),
   targetDepartment: text('target_department').notNull().references(() => departments.name, { onDelete: 'restrict' }),
   title: text('title').notNull(),
   description: text('description').notNull(),
@@ -117,9 +132,9 @@ export const defaultSlas = pgTable('default_slas', {
 
 // System notifications emitted on business workflow events
 export const notifications = pgTable('notifications', {
-  id: varchar('id', { length: 64 }).primaryKey(),
+  id: uuid('id').primaryKey().defaultRandom(),
   recipientUsername: varchar('recipient_username', { length: 64 }).notNull(),
-  ticketId: varchar('ticket_id', { length: 64 }),
+  ticketId: uuid('ticket_id'),
   type: varchar('type', { length: 64 }).notNull(),
   title: text('title').notNull(),
   body: text('body').notNull(),
@@ -129,7 +144,7 @@ export const notifications = pgTable('notifications', {
 
 // Immutable audit log recording administrative configuration changes
 export const auditLogs = pgTable('audit_logs', {
-  id: varchar('id', { length: 64 }).primaryKey(),
+  id: uuid('id').primaryKey().defaultRandom(),
   actorUsername: varchar('actor_username', { length: 64 }).notNull(),
   action: varchar('action', { length: 64 }).notNull(),
   entityType: varchar('entity_type', { length: 64 }).notNull(),
@@ -140,7 +155,7 @@ export const auditLogs = pgTable('audit_logs', {
 
 // Registered device tokens for mobile and web push notifications via Firebase Cloud Messaging
 export const deviceTokens = pgTable('device_tokens', {
-  id: varchar('id', { length: 64 }).primaryKey(),
+  id: uuid('id').primaryKey().defaultRandom(),
   username: varchar('username', { length: 64 }).notNull(),
   token: text('token').notNull().unique(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

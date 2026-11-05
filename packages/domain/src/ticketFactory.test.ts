@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import type { NewTicketInput, Viewer } from './ticket.ts'
-import { buildMockTickets } from './mockTickets.ts'
 import { filterVisibleTickets } from './ticketVisibility.ts'
 import { ENTERPRISE_TEMPLATES } from './ticketTemplates.ts'
 import { validateNewTicket } from './validateNewTicket.ts'
@@ -22,25 +21,24 @@ const input: NewTicketInput = {
 }
 
 describe('creating a ticket', () => {
-  it('should_create_open_ticket_with_unique_id_and_injected_timestamp', () => {
-    const existing = buildMockTickets(now)
-    const first = buildTicket(input, requester, existing, now)
-    const second = buildTicket(input, requester, [first, ...existing], now)
+  it('should_create_open_ticket_with_given_identity_and_injected_timestamp', () => {
+    const first = buildTicket(input, requester, { id: 'id-1', code: 'TCK-KT-2606-001' }, now)
     expect(first.status).toBe('open')
     expect(first.title).toBe('Hoàn ứng công tác')
     expect(first.createdAt).toBe(now.toISOString())
     expect(first.statusHistory).toEqual([{ status: 'open', at: now.toISOString(), actor: { name: requester.name, department: requester.department } }])
-    expect(new Set([...existing.map((ticket) => ticket.id), first.id, second.id]).size).toBe(existing.length + 2)
+    expect(first.id).toBe('id-1')
+    expect(first.code).toBe('TCK-KT-2606-001')
   })
 
   it('should_appear_in_the_receiving_head_queue_and_the_requester_list', () => {
-    const ticket = buildTicket(input, requester, buildMockTickets(now), now)
+    const ticket = buildTicket(input, requester, { id: 'id-2', code: 'TCK-KT-2606-002' }, now)
     expect(filterVisibleTickets([ticket], accountingHead)).toEqual([ticket])
     expect(filterVisibleTickets([ticket], requester)).toEqual([ticket])
   })
 
   it('should_refuse_to_build_when_target_department_is_missing', () => {
-    expect(() => buildTicket({ ...input, toDepartment: '' }, requester, [], now)).toThrow('target department')
+    expect(() => buildTicket({ ...input, toDepartment: '' }, requester, { id: 'id-3', code: 'TCK-KT-2606-003' }, now)).toThrow('target department')
   })
 })
 

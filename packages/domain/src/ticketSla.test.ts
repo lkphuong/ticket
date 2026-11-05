@@ -5,6 +5,7 @@ import { calculateTicketSla } from './ticketSla.ts'
 function createSampleTicket(overrides: Partial<Ticket>): Ticket {
   return {
     id: 'TCK-2001',
+    code: 'TCK-2001',
     title: 'Kiem tra he thong',
     description: 'Mo ta kiem tra he thong',
     priority: 'medium',

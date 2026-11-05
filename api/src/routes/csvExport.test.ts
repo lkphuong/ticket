@@ -158,6 +158,7 @@ describe('Ticket CSV Export API', () => {
     // Add ticket with quotes, commas, multiline and formula prefix
     const specialTicket = makeCustomTicket({
       id: 'TCK-ESCAPE-99',
+      code: 'TCK-ESCAPE-99',
       title: 'Hỗ trợ "nâng cấp", kiểm tra máy tính',
       description: '=CMD|calc!A0\nThực hiện kiểm tra định kỳ',
       requesterName: 'Nguyễn Minh Anh',

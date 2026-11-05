@@ -71,7 +71,10 @@ export interface TicketAttachment {
 }
 
 export interface Ticket {
+  // Database identifier (uuid); never shown to people
   id: string
+  // Human readable code such as TCK-CNTT-2611-001, shown in screens, exports and notifications
+  code: string
   title: string
   description: string
   // Absent on tickets created before these fields were introduced

@@ -100,7 +100,7 @@ export class NotificationService {
             targetRecipients.push({
               username: head.username,
               title: 'Ticket mới gửi đến phòng',
-              body: `[${ticket.id}] ${ticket.title} từ phòng ${ticket.fromDepartment}`,
+              body: `[${ticket.code}] ${ticket.title} từ phòng ${ticket.fromDepartment}`,
             })
           }
           break
@@ -113,7 +113,7 @@ export class NotificationService {
               targetRecipients.push({
                 username: assignee.username,
                 title: 'Bạn được phân công xử lý Ticket',
-                body: `[${ticket.id}] ${ticket.title}`,
+                body: `[${ticket.code}] ${ticket.title}`,
               })
             }
           }
@@ -126,7 +126,7 @@ export class NotificationService {
             targetRecipients.push({
               username: requester.username,
               title: 'Yêu cầu cần phản hồi thông tin',
-              body: `[${ticket.id}] ${ticket.title}${event.reason ? `: ${event.reason}` : ''}`,
+              body: `[${ticket.code}] ${ticket.title}${event.reason ? `: ${event.reason}` : ''}`,
             })
           }
           break
@@ -138,7 +138,7 @@ export class NotificationService {
             targetRecipients.push({
               username: requester.username,
               title: 'Yêu cầu đã xử lý hoàn tất',
-              body: `[${ticket.id}] ${ticket.title} đã hoàn thành, vui lòng nghiệm thu.`,
+              body: `[${ticket.code}] ${ticket.title} đã hoàn thành, vui lòng nghiệm thu.`,
             })
           }
           break
@@ -154,7 +154,7 @@ export class NotificationService {
                 targetRecipients.push({
                   username: assignee.username,
                   title: 'Người gửi đã phản hồi Ticket',
-                  body: `[${ticket.id}] ${ticket.title}: ${event.body}`,
+                  body: `[${ticket.code}] ${ticket.title}: ${event.body}`,
                 })
               }
             }
@@ -164,7 +164,7 @@ export class NotificationService {
               targetRecipients.push({
                 username: requester.username,
                 title: 'Có trao đổi mới trên Ticket',
-                body: `[${ticket.id}] ${ticket.title}: ${event.body}`,
+                body: `[${ticket.code}] ${ticket.title}: ${event.body}`,
               })
             }
           }
@@ -178,7 +178,7 @@ export class NotificationService {
             targetRecipients.push({
               username: head.username,
               title: 'Yêu cầu đã được nghiệm thu',
-              body: `[${ticket.id}] ${ticket.title} - Đánh giá: ${event.rating}/5 sao`,
+              body: `[${ticket.code}] ${ticket.title} - Đánh giá: ${event.rating}/5 sao`,
             })
           }
 
@@ -188,7 +188,7 @@ export class NotificationService {
               targetRecipients.push({
                 username: assignee.username,
                 title: 'Yêu cầu đã được nghiệm thu',
-                body: `[${ticket.id}] ${ticket.title} - Đánh giá: ${event.rating}/5 sao`,
+                body: `[${ticket.code}] ${ticket.title} - Đánh giá: ${event.rating}/5 sao`,
               })
             }
           }
@@ -201,7 +201,7 @@ export class NotificationService {
             targetRecipients.push({
               username: head.username,
               title: 'Yêu cầu cần làm lại',
-              body: `[${ticket.id}] ${ticket.title} - Lý do: ${event.reason}`,
+              body: `[${ticket.code}] ${ticket.title} - Lý do: ${event.reason}`,
             })
           }
 
@@ -211,7 +211,7 @@ export class NotificationService {
               targetRecipients.push({
                 username: assignee.username,
                 title: 'Yêu cầu cần làm lại',
-                body: `[${ticket.id}] ${ticket.title} - Lý do: ${event.reason}`,
+                body: `[${ticket.code}] ${ticket.title} - Lý do: ${event.reason}`,
               })
             }
           }
@@ -224,7 +224,7 @@ export class NotificationService {
             targetRecipients.push({
               username: head.username,
               title: 'Yêu cầu được mở lại',
-              body: `[${ticket.id}] ${ticket.title} - Lý do: ${event.reason}`,
+              body: `[${ticket.code}] ${ticket.title} - Lý do: ${event.reason}`,
             })
           }
 
@@ -234,7 +234,7 @@ export class NotificationService {
               targetRecipients.push({
                 username: assignee.username,
                 title: 'Yêu cầu được mở lại',
-                body: `[${ticket.id}] ${ticket.title} - Lý do: ${event.reason}`,
+                body: `[${ticket.code}] ${ticket.title} - Lý do: ${event.reason}`,
               })
             }
           }
@@ -248,7 +248,7 @@ export class NotificationService {
             targetRecipients.push({
               username: head.username,
               title: 'Yêu cầu đã bị hủy',
-              body: `[${ticket.id}] ${ticket.title} - Lý do: ${event.reason}`,
+              body: `[${ticket.code}] ${ticket.title} - Lý do: ${event.reason}`,
             })
           }
 
@@ -258,7 +258,7 @@ export class NotificationService {
               targetRecipients.push({
                 username: assignee.username,
                 title: 'Yêu cầu đã bị hủy',
-                body: `[${ticket.id}] ${ticket.title} - Lý do: ${event.reason}`,
+                body: `[${ticket.code}] ${ticket.title} - Lý do: ${event.reason}`,
               })
             }
           }
@@ -269,7 +269,7 @@ export class NotificationService {
             targetRecipients.push({
               username: requester.username,
               title: 'Yêu cầu đã bị từ chối / hủy',
-              body: `[${ticket.id}] ${ticket.title} - Lý do: ${event.reason}`,
+              body: `[${ticket.code}] ${ticket.title} - Lý do: ${event.reason}`,
             })
           }
           break
@@ -281,7 +281,7 @@ export class NotificationService {
             targetRecipients.push({
               username: head.username,
               title: 'Ticket sắp đến hạn',
-              body: `[${ticket.id}] ${ticket.title} còn 1 ngày đến hạn xử lý (${ticket.dueDate})`,
+              body: `[${ticket.code}] ${ticket.title} còn 1 ngày đến hạn xử lý (${ticket.dueDate})`,
             })
           }
 
@@ -291,7 +291,7 @@ export class NotificationService {
               targetRecipients.push({
                 username: assignee.username,
                 title: 'Ticket sắp đến hạn',
-                body: `[${ticket.id}] ${ticket.title} còn 1 ngày đến hạn xử lý (${ticket.dueDate})`,
+                body: `[${ticket.code}] ${ticket.title} còn 1 ngày đến hạn xử lý (${ticket.dueDate})`,
               })
             }
           }
@@ -304,7 +304,7 @@ export class NotificationService {
             targetRecipients.push({
               username: head.username,
               title: 'Ticket đã quá hạn',
-              body: `[${ticket.id}] ${ticket.title} đã quá hạn xử lý (${ticket.dueDate})`,
+              body: `[${ticket.code}] ${ticket.title} đã quá hạn xử lý (${ticket.dueDate})`,
             })
           }
 
@@ -314,7 +314,7 @@ export class NotificationService {
               targetRecipients.push({
                 username: assignee.username,
                 title: 'Ticket đã quá hạn',
-                body: `[${ticket.id}] ${ticket.title} đã quá hạn xử lý (${ticket.dueDate})`,
+                body: `[${ticket.code}] ${ticket.title} đã quá hạn xử lý (${ticket.dueDate})`,
               })
             }
           }
@@ -327,7 +327,7 @@ export class NotificationService {
       // Save each notification and push through configured channels
       for (const target of targetRecipients) {
         const item: DbNotification = {
-          id: `notif-${crypto.randomUUID()}`,
+          id: crypto.randomUUID(),
           recipientUsername: target.username,
           ticketId: ticket.id,
           type: event.type,
@@ -392,7 +392,7 @@ export class NotificationService {
       throw new Error('Device token cannot be empty.')
     }
     await this.store.deviceTokens.save({
-      id: `dev-${crypto.randomUUID()}`,
+      id: crypto.randomUUID(),
       username,
       token: trimmed,
       createdAt: this.clock(),

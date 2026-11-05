@@ -158,7 +158,7 @@ export function TicketDetailPage() {
             <button
               type="button"
               onClick={() =>
-                copyToClipboard(ticket.id, `Đã sao chép mã ${ticket.id}`)
+                copyToClipboard(ticket.code, `Đã sao chép mã ${ticket.code}`)
               }
               className="inline-flex items-center gap-1.5 rounded border border-line bg-surface px-2.5 py-1 text-xs font-semibold text-ink-muted hover:border-accent-600 hover:text-ink"
             >
@@ -199,7 +199,7 @@ export function TicketDetailPage() {
 
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-bold tracking-wider text-ink-muted">
-              {ticket.id}
+              {ticket.code}
             </span>
             <h1 className="w-full text-2xl font-bold tracking-tight text-ink md:w-auto">
               {ticket.title}

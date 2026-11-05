@@ -1,5 +1,5 @@
 CREATE TABLE "audit_logs" (
-	"id" varchar(64) PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"actor_username" varchar(64) NOT NULL,
 	"action" varchar(64) NOT NULL,
 	"entity_type" varchar(64) NOT NULL,
@@ -9,8 +9,8 @@ CREATE TABLE "audit_logs" (
 );
 --> statement-breakpoint
 CREATE TABLE "comment_attachments" (
-	"id" varchar(64) PRIMARY KEY NOT NULL,
-	"comment_id" varchar(64) NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"comment_id" uuid NOT NULL,
 	"name" text NOT NULL,
 	"size_kb" integer NOT NULL
 );
@@ -25,11 +25,21 @@ CREATE TABLE "default_slas" (
 --> statement-breakpoint
 CREATE TABLE "departments" (
 	"name" text PRIMARY KEY NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+	"code_prefix" varchar(12) NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "departments_code_prefix_unique" UNIQUE("code_prefix")
+);
+--> statement-breakpoint
+CREATE TABLE "device_tokens" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"username" varchar(64) NOT NULL,
+	"token" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "device_tokens_token_unique" UNIQUE("token")
 );
 --> statement-breakpoint
 CREATE TABLE "members" (
-	"id" varchar(64) PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"username" varchar(64) NOT NULL,
 	"name" text NOT NULL,
 	"department" text NOT NULL,
@@ -46,9 +56,9 @@ CREATE TABLE "members" (
 );
 --> statement-breakpoint
 CREATE TABLE "notifications" (
-	"id" varchar(64) PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"recipient_username" varchar(64) NOT NULL,
-	"ticket_id" varchar(64),
+	"ticket_id" uuid,
 	"type" varchar(64) NOT NULL,
 	"title" text NOT NULL,
 	"body" text NOT NULL,
@@ -57,7 +67,7 @@ CREATE TABLE "notifications" (
 );
 --> statement-breakpoint
 CREATE TABLE "request_templates" (
-	"id" varchar(64) PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"target_department" text NOT NULL,
 	"title" text NOT NULL,
 	"description" text NOT NULL,
@@ -70,8 +80,8 @@ CREATE TABLE "request_templates" (
 );
 --> statement-breakpoint
 CREATE TABLE "ticket_assignment_history" (
-	"id" varchar(64) PRIMARY KEY NOT NULL,
-	"ticket_id" varchar(64) NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"ticket_id" uuid NOT NULL,
 	"from_assignee" text,
 	"to_assignee" text NOT NULL,
 	"at" varchar(64) NOT NULL,
@@ -80,15 +90,22 @@ CREATE TABLE "ticket_assignment_history" (
 );
 --> statement-breakpoint
 CREATE TABLE "ticket_attachments" (
-	"id" varchar(64) PRIMARY KEY NOT NULL,
-	"ticket_id" varchar(64) NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"ticket_id" uuid NOT NULL,
 	"name" text NOT NULL,
 	"size_kb" integer NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "ticket_code_counters" (
+	"code_prefix" varchar(12) NOT NULL,
+	"period" varchar(4) NOT NULL,
+	"last_sequence" integer NOT NULL,
+	CONSTRAINT "ticket_code_counters_code_prefix_period_pk" PRIMARY KEY("code_prefix","period")
+);
+--> statement-breakpoint
 CREATE TABLE "ticket_comments" (
-	"id" varchar(64) PRIMARY KEY NOT NULL,
-	"ticket_id" varchar(64) NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"ticket_id" uuid NOT NULL,
 	"author" text NOT NULL,
 	"department" text NOT NULL,
 	"body" text NOT NULL,
@@ -96,8 +113,8 @@ CREATE TABLE "ticket_comments" (
 );
 --> statement-breakpoint
 CREATE TABLE "ticket_status_history" (
-	"id" varchar(64) PRIMARY KEY NOT NULL,
-	"ticket_id" varchar(64) NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"ticket_id" uuid NOT NULL,
 	"status" varchar(20) NOT NULL,
 	"at" varchar(64) NOT NULL,
 	"reason" text,
@@ -106,7 +123,8 @@ CREATE TABLE "ticket_status_history" (
 );
 --> statement-breakpoint
 CREATE TABLE "tickets" (
-	"id" varchar(64) PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"code" varchar(40) NOT NULL,
 	"title" text NOT NULL,
 	"description" text NOT NULL,
 	"purpose" text,
@@ -122,7 +140,8 @@ CREATE TABLE "tickets" (
 	"feedback" text,
 	"cancel_reason" text,
 	"created_at" varchar(64) NOT NULL,
-	"created_at_updated" varchar(64) NOT NULL
+	"updated_at" varchar(64) NOT NULL,
+	CONSTRAINT "tickets_code_unique" UNIQUE("code")
 );
 --> statement-breakpoint
 ALTER TABLE "comment_attachments" ADD CONSTRAINT "comment_attachments_comment_id_ticket_comments_id_fk" FOREIGN KEY ("comment_id") REFERENCES "public"."ticket_comments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

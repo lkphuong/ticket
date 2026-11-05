@@ -176,7 +176,7 @@ describe('Create Ticket API', () => {
     expect(ticket.statusHistory[0].actor.department).toBe('Kinh doanh')
   })
 
-  it('should_allocate_unique_ticket_ids_under_concurrent_ticket_creation', async () => {
+  it('should_allocate_unique_ticket_ids_and_codes_under_concurrent_ticket_creation', async () => {
     const { app, staffToken } = await setup()
 
     // Dispatch 10 simultaneous creation requests
@@ -201,13 +201,14 @@ describe('Create Ticket API', () => {
       expect(res.status).toBe(201)
     }
 
-    const createdIds = responses.map((res) => res.body.ticket.id)
-    const uniqueIds = new Set(createdIds)
+    const tickets = responses.map((res) => res.body.ticket)
 
-    // Verify all generated IDs are strictly unique
-    expect(uniqueIds.size).toBe(count)
-    for (const id of createdIds) {
-      expect(id).toMatch(/^TCK-\d+$/)
+    // Verify all generated identifiers and codes are strictly unique and well formed
+    expect(new Set(tickets.map((ticket) => ticket.id)).size).toBe(count)
+    expect(new Set(tickets.map((ticket) => ticket.code)).size).toBe(count)
+    for (const ticket of tickets) {
+      expect(ticket.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+      expect(ticket.code).toMatch(/^TCK-CNTT-\d{4}-\d{3,}$/)
     }
   })
 })

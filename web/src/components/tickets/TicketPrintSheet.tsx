@@ -75,7 +75,7 @@ function PrintHeader({ ticket, printedAt }: TicketPrintSheetProps) {
         </div>
         <dl className="text-right text-[10px] leading-snug text-ink-muted">
           <div>
-            Mã yêu cầu: <strong className="text-sm text-ink">{ticket.id}</strong>
+            Mã yêu cầu: <strong className="text-sm text-ink">{ticket.code}</strong>
           </div>
           <div>Ngày in: {formatDate(printedAt.toISOString())}</div>
         </dl>
@@ -217,7 +217,7 @@ export function TicketPrintSheet({ ticket, printedAt }: TicketPrintSheetProps) {
       <PrintApproval />
       <PrintSignatures />
       <footer className="mt-2 flex justify-between border-t border-line-strong pt-1 text-[9px] text-ink-muted">
-        <span>{ticket.id}</span>
+        <span>{ticket.code}</span>
         <span>In lúc {formatDateTime(printedAt.toISOString())}</span>
       </footer>
     </article>

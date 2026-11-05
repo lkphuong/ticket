@@ -5,6 +5,7 @@ import { generateTicketsCsv } from './ticketExport.ts'
 function createSampleTicket(overrides: Partial<Ticket>): Ticket {
   return {
     id: 'TCK-1001',
+    code: 'TCK-1001',
     title: 'Báo cáo tài chính quý 1',
     description: 'Yêu cầu lập báo cáo',
     priority: 'high',

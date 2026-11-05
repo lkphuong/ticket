@@ -11,7 +11,8 @@ describe('InMemoryTicketStore', () => {
   it('should_write_and_read_back_ticket_with_full_fidelity_when_saved_in_memory', async () => {
     const store = new InMemoryTicketStore()
     const ticket: Ticket = {
-      id: 'TK-TEST-01',
+      id: '11111111-1111-4111-8111-111111111101',
+      code: 'TCK-CNTT-2611-001',
       title: 'Fix VPN Gateway Authentication',
       description: 'Users cannot connect to internal services via Wireguard gateway',
       priority: 'urgent',
@@ -26,7 +27,7 @@ describe('InMemoryTicketStore', () => {
       attachments: [{ name: 'error-log.txt', sizeKb: 128 }],
       comments: [
         {
-          id: 'cm-01',
+          id: '33333333-3333-4333-8333-333333333301',
           author: 'Đặng Văn Khoa',
           department: 'Công nghệ thông tin',
           body: 'Checking RADIUS server connection',
@@ -52,10 +53,10 @@ describe('InMemoryTicketStore', () => {
     }
 
     await store.tickets.save(ticket)
-    const retrieved = await store.tickets.findById('TK-TEST-01')
+    const retrieved = await store.tickets.findById('11111111-1111-4111-8111-111111111101')
 
     expect(retrieved).not.toBeNull()
-    expect(retrieved?.id).toBe('TK-TEST-01')
+    expect(retrieved?.id).toBe('11111111-1111-4111-8111-111111111101')
     expect(retrieved?.title).toBe(ticket.title)
     expect(retrieved?.attachments).toHaveLength(1)
     expect(retrieved?.comments).toHaveLength(1)
@@ -127,7 +128,8 @@ describe('PostgresTicketStore with real PostgreSQL engine', () => {
 
     // 6. Test save and retrieve round-trip with full history and attachments
     const newTicket: Ticket = {
-      id: 'TK-PG-999',
+      id: '22222222-2222-4222-8222-222222222999',
+      code: 'TCK-CNTT-2611-050',
       title: 'Postgres Persistence Verification',
       description: 'End-to-end relational schema and mapping verification',
       priority: 'high',
@@ -144,7 +146,7 @@ describe('PostgresTicketStore with real PostgreSQL engine', () => {
       attachments: [{ name: 'spec.pdf', sizeKb: 512 }],
       comments: [
         {
-          id: 'cm-pg-01',
+          id: '33333333-3333-4333-8333-333333333302',
           author: 'Đặng Văn Khoa',
           department: 'Công nghệ thông tin',
           body: 'Fix deployed to production cluster',
@@ -175,10 +177,10 @@ describe('PostgresTicketStore with real PostgreSQL engine', () => {
     }
 
     await store.tickets.save(newTicket)
-    const readTicket = await store.tickets.findById('TK-PG-999')
+    const readTicket = await store.tickets.findById('22222222-2222-4222-8222-222222222999')
 
     expect(readTicket).not.toBeNull()
-    expect(readTicket?.id).toBe('TK-PG-999')
+    expect(readTicket?.id).toBe('22222222-2222-4222-8222-222222222999')
     expect(readTicket?.title).toBe(newTicket.title)
     expect(readTicket?.attachments).toHaveLength(1)
     expect(readTicket?.attachments[0].name).toBe('spec.pdf')
@@ -190,12 +192,12 @@ describe('PostgresTicketStore with real PostgreSQL engine', () => {
 
     // 7. Test notification repository operations
     await store.notifications.save({
-      id: 'nt-01',
+      id: '44444444-4444-4444-8444-444444444401',
       recipientUsername: 'minhanh',
-      ticketId: 'TK-PG-999',
+      ticketId: '22222222-2222-4222-8222-222222222999',
       type: 'ticket_resolved',
       title: 'Ticket resolved',
-      body: 'Your ticket TK-PG-999 has been resolved.',
+      body: 'Your ticket TCK-CNTT-2611-050 has been resolved.',
       isRead: false,
       createdAt: '2026-11-05T10:50:00.000Z',
     })
@@ -204,13 +206,13 @@ describe('PostgresTicketStore with real PostgreSQL engine', () => {
     expect(notifications).toHaveLength(1)
     expect(notifications[0].isRead).toBe(false)
 
-    await store.notifications.markAsRead('nt-01')
+    await store.notifications.markAsRead('44444444-4444-4444-8444-444444444401')
     const updatedNotifications = await store.notifications.findByRecipient('minhanh')
     expect(updatedNotifications[0].isRead).toBe(true)
 
     // 8. Test device tokens repository operations in PostgreSQL
     await store.deviceTokens.save({
-      id: 'dt-01',
+      id: '55555555-5555-4555-8555-555555555501',
       username: 'minhanh',
       token: 'fcm-pg-token-01',
     })

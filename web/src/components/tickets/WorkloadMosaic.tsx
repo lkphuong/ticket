@@ -33,7 +33,7 @@ export function WorkloadMosaic({ workload, now }: WorkloadMosaicProps) {
             <span className="flex flex-wrap items-center gap-2.5">
               {entry.tickets.map((ticket) => {
                 const overdue = isTicketOverdue(ticket, now)
-                const label = `${ticket.id}, ${STATUS_LABELS[ticket.status]}${overdue ? ', quá hạn' : ''}`
+                const label = `${ticket.code}, ${STATUS_LABELS[ticket.status]}${overdue ? ', quá hạn' : ''}`
                 return (
                   <Link
                     key={ticket.id}

@@ -102,7 +102,7 @@ export function NewTicketPage() {
     }
     try {
       const ticket = await createTicket(input)
-      notify(`Đã gửi yêu cầu ${ticket.id} thành công`, 'success')
+      notify(`Đã gửi yêu cầu ${ticket.code} thành công`, 'success')
       navigate(`/tickets/${ticket.id}`)
     } catch (err: any) {
       notify(err.message || 'Không thể tạo yêu cầu', 'danger')

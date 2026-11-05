@@ -1,4 +1,4 @@
-import { DEPARTMENTS, ENTERPRISE_TEMPLATES, MEMBERS, buildMockTickets } from '@vtdesk/domain'
+import { DEPARTMENTS, DEPARTMENT_CODE_PREFIXES, ENTERPRISE_TEMPLATES, MEMBERS, buildMockTickets, deterministicUuid } from '@vtdesk/domain'
 import type { ITicketStore } from '../repositories/interfaces.ts'
 
 const DEFAULT_SLAS = [
@@ -12,7 +12,7 @@ const DEFAULT_SLAS = [
 export async function seedDatabase(store: ITicketStore, now: Date = new Date()): Promise<void> {
   // 1. Seed canonical departments
   for (const dept of DEPARTMENTS) {
-    await store.departments.create(dept)
+    await store.departments.create(dept, DEPARTMENT_CODE_PREFIXES[dept])
   }
 
   // Existing rows are never overwritten so re-running the seed keeps live data intact
@@ -28,7 +28,7 @@ export async function seedDatabase(store: ITicketStore, now: Date = new Date()):
     const m = MEMBERS[i]
     if (existingUsernames.has(m.username)) continue
     await store.members.save({
-      id: `usr-${m.username}`,
+      id: deterministicUuid(`member:${m.username}`),
       username: m.username,
       name: m.name,
       department: m.department,
@@ -44,7 +44,7 @@ export async function seedDatabase(store: ITicketStore, now: Date = new Date()):
   // 4. Seed system Administrator account
   if (!existingUsernames.has('admin')) {
     await store.members.save({
-      id: 'usr-admin',
+      id: deterministicUuid('member:admin'),
       username: 'admin',
       name: 'Quản trị viên Hệ thống',
       department: 'Công nghệ thông tin',
@@ -61,9 +61,9 @@ export async function seedDatabase(store: ITicketStore, now: Date = new Date()):
   // 5. Seed request templates
   for (let i = 0; i < ENTERPRISE_TEMPLATES.length; i++) {
     const t = ENTERPRISE_TEMPLATES[i]
-    if (existingTemplateIds.has(t.id)) continue
+    if (existingTemplateIds.has(deterministicUuid(`template:${t.id}`))) continue
     await store.templates.save({
-      id: t.id,
+      id: deterministicUuid(`template:${t.id}`),
       targetDepartment: t.targetDepartment,
       title: t.name,
       description: t.values.description,

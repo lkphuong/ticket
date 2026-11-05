@@ -10,6 +10,14 @@ Express API backed by PostgreSQL through Drizzle ORM, run with Bun.
 4. Load demo data: `bun run db:seed`.
 5. Start the API: `bun run dev` (default port 3001; the web dev server proxies `/api` to it).
 
+## Identifiers
+
+- Every table uses a `uuid` primary key (generated with `gen_random_uuid()`); departments and default SLAs keep their natural keys.
+- Tickets also carry a human readable `code` shown in screens, CSV and notifications: `TCK-{department prefix}-{YYMM}-{sequence}`, e.g. `TCK-CNTT-2611-001`.
+- The prefix is stored in `departments.code_prefix` and defaults to the department initials when an administrator creates a department.
+- The sequence restarts at `001` each month per receiving department and is allocated atomically from `ticket_code_counters`.
+- The migrations were rewritten into a single `0000_init.sql`. A database created from an older version must be dropped and migrated again.
+
 ## Demo data
 
 `bun run db:seed` seeds departments, members, request templates, default SLAs and sample tickets.

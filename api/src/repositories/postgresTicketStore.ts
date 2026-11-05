@@ -1,4 +1,5 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
+import { formatTicketCode, formatTicketPeriod } from '@vtdesk/domain'
 import type { Department, Ticket, TicketAssignmentChange, TicketAttachment, TicketComment, TicketPriority, TicketStatus, TicketStatusChange } from '@vtdesk/domain'
 import * as schema from '../db/schema.ts'
 import type {
@@ -77,6 +78,7 @@ export class PostgresTicketRepository implements ITicketRepository {
 
     return {
       id: row.id,
+      code: row.code,
       title: row.title,
       description: row.description,
       purpose: row.purpose ?? undefined,
@@ -115,6 +117,7 @@ export class PostgresTicketRepository implements ITicketRepository {
 
     const ticketValues = {
       id: ticket.id,
+      code: ticket.code,
       title: ticket.title,
       description: ticket.description,
       purpose: ticket.purpose ?? null,
@@ -145,7 +148,6 @@ export class PostgresTicketRepository implements ITicketRepository {
       for (let i = 0; i < ticket.attachments.length; i++) {
         const att = ticket.attachments[i]
         await this.db.insert(schema.ticketAttachments).values({
-          id: `${ticket.id}-att-${i}`,
           ticketId: ticket.id,
           name: att.name,
           sizeKb: att.sizeKb,
@@ -170,7 +172,6 @@ export class PostgresTicketRepository implements ITicketRepository {
           for (let k = 0; k < comment.attachments.length; k++) {
             const cAtt = comment.attachments[k]
             await this.db.insert(schema.commentAttachments).values({
-              id: `${comment.id}-att-${k}`,
               commentId: comment.id,
               name: cAtt.name,
               sizeKb: cAtt.sizeKb,
@@ -186,7 +187,6 @@ export class PostgresTicketRepository implements ITicketRepository {
       for (let i = 0; i < ticket.statusHistory.length; i++) {
         const sh = ticket.statusHistory[i]
         await this.db.insert(schema.ticketStatusHistory).values({
-          id: `${ticket.id}-sh-${i}`,
           ticketId: ticket.id,
           status: sh.status,
           at: sh.at,
@@ -203,7 +203,6 @@ export class PostgresTicketRepository implements ITicketRepository {
       for (let i = 0; i < ticket.assignmentHistory.length; i++) {
         const ah = ticket.assignmentHistory[i]
         await this.db.insert(schema.ticketAssignmentHistory).values({
-          id: `${ticket.id}-ah-${i}`,
           ticketId: ticket.id,
           fromAssignee: ah.from ?? null,
           toAssignee: ah.to,
@@ -217,6 +216,24 @@ export class PostgresTicketRepository implements ITicketRepository {
 
   async delete(id: string): Promise<void> {
     await this.db.delete(schema.tickets).where(eq(schema.tickets.id, id))
+  }
+
+  // Atomically reserves the next sequence for a department prefix and month; a first allocation continues after codes already stored
+  async allocateCode(codePrefix: string, now: Date): Promise<string> {
+    const period = formatTicketPeriod(now)
+    const codeStem = `TCK-${codePrefix}-${period}-`
+    const rows = await this.db.execute(sql`
+      INSERT INTO ticket_code_counters (code_prefix, period, last_sequence)
+      VALUES (
+        ${codePrefix},
+        ${period},
+        COALESCE((SELECT MAX(CAST(SUBSTRING(code FROM CAST(${codeStem.length + 1} AS integer)) AS integer)) FROM tickets WHERE code LIKE ${`${codeStem}%`}), 0) + 1
+      )
+      ON CONFLICT (code_prefix, period) DO UPDATE SET last_sequence = ticket_code_counters.last_sequence + 1
+      RETURNING last_sequence
+    `)
+    const sequence = Number((Array.isArray(rows) ? rows : rows.rows)[0].last_sequence)
+    return formatTicketCode(codePrefix, period, sequence)
   }
 }
 
@@ -291,10 +308,15 @@ export class PostgresDepartmentRepository implements IDepartmentRepository {
     return rows.map((r: { name: string }) => r.name)
   }
 
-  async create(name: string): Promise<void> {
+  async findCodePrefix(name: string): Promise<string | null> {
+    const rows = await this.db.select().from(schema.departments).where(eq(schema.departments.name, name))
+    return rows.length > 0 ? rows[0].codePrefix : null
+  }
+
+  async create(name: string, codePrefix: string): Promise<void> {
     const existing = await this.db.select().from(schema.departments).where(eq(schema.departments.name, name))
     if (existing.length === 0) {
-      await this.db.insert(schema.departments).values({ name })
+      await this.db.insert(schema.departments).values({ name, codePrefix })
     }
   }
 }
