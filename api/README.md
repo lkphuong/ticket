@@ -6,7 +6,7 @@ Express API backed by PostgreSQL through Drizzle ORM, run with Bun.
 
 1. Install dependencies from the repository root: `bun install`.
 2. Copy `api/.env.example` to `api/.env` and fill in `DATABASE_URL` (and `PORT` or `NODE_ENV` when needed). The `.env` file is git-ignored.
-3. Apply migrations: `bun run db:migrate` (the server also applies them on startup).
+3. Apply migrations: `bun run db:migrate` (from `api/` or the repository root) (the server also applies them on startup).
 4. Load demo data: `bun run db:seed`.
 5. Start the API: `bun run dev` (default port 3001; the web dev server proxies `/api` to it).
 
