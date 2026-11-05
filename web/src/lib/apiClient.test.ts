@@ -1,7 +1,7 @@
 // Tests verifying HTTP API client behavior, token handling, and Vietnamese error localization
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { ApiClient, ApiError, getStoredSessionToken, setStoredSessionToken } from './apiClient.ts'
+import { ApiClient, getStoredSessionToken, setStoredSessionToken } from './apiClient.ts'
 
 describe('ApiClient', () => {
   let originalFetch: typeof globalThis.fetch
@@ -112,5 +112,85 @@ describe('ApiClient', () => {
     const client = new ApiClient('/api')
     const result = await client.tickets.exportCsv()
     expect(result).toBe(csvContent)
+  })
+
+  it('should_execute_notification_api_requests_with_correct_payloads', async () => {
+    let capturedUrl = ''
+    let capturedMethod = ''
+    let capturedBody = ''
+
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      capturedUrl = String(url)
+      capturedMethod = init?.method || 'GET'
+      capturedBody = typeof init?.body === 'string' ? init.body : ''
+      return new Response(JSON.stringify({ ok: true, notifications: [], unreadCount: 0 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }) as any
+
+    const client = new ApiClient('/api')
+    await client.notifications.list()
+    expect(capturedUrl).toBe('/api/notifications')
+    expect(capturedMethod).toBe('GET')
+
+    await client.notifications.markRead('ntf-1')
+    expect(capturedUrl).toBe('/api/notifications/ntf-1/read')
+    expect(capturedMethod).toBe('PATCH')
+
+    await client.notifications.markAllRead()
+    expect(capturedUrl).toBe('/api/notifications/read-all')
+    expect(capturedMethod).toBe('PATCH')
+
+    await client.notifications.registerDevice('token-device-xyz')
+    expect(capturedUrl).toBe('/api/notifications/devices')
+    expect(capturedMethod).toBe('POST')
+    expect(capturedBody).toContain('token-device-xyz')
+  })
+
+  it('should_execute_cms_api_requests_with_correct_routes_and_payloads', async () => {
+    let capturedUrl = ''
+    let capturedMethod = ''
+
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      capturedUrl = String(url)
+      capturedMethod = init?.method || 'GET'
+      return new Response(JSON.stringify({ members: [], departments: [], templates: [], slas: [], auditLogs: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }) as any
+
+    const client = new ApiClient('/api')
+    await client.cms.getMembers()
+    expect(capturedUrl).toBe('/api/cms/members')
+
+    await client.cms.lockMember('mbr-1')
+    expect(capturedUrl).toBe('/api/cms/members/mbr-1/lock')
+    expect(capturedMethod).toBe('POST')
+
+    await client.cms.unlockMember('mbr-1')
+    expect(capturedUrl).toBe('/api/cms/members/mbr-1/unlock')
+    expect(capturedMethod).toBe('POST')
+
+    await client.cms.resetPassword('mbr-1')
+    expect(capturedUrl).toBe('/api/cms/members/mbr-1/reset-password')
+    expect(capturedMethod).toBe('POST')
+
+    await client.cms.getDepartments()
+    expect(capturedUrl).toBe('/api/cms/departments')
+
+    await client.cms.getTemplates()
+    expect(capturedUrl).toBe('/api/cms/templates')
+
+    await client.cms.getSlas()
+    expect(capturedUrl).toBe('/api/cms/slas')
+
+    await client.cms.updateSla('urgent', 2, 8)
+    expect(capturedUrl).toBe('/api/cms/slas/urgent')
+    expect(capturedMethod).toBe('PUT')
+
+    await client.cms.getAuditLogs()
+    expect(capturedUrl).toBe('/api/cms/audit-logs')
   })
 })

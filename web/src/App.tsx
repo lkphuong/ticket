@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router-dom'
 import { PasswordChangeGate } from './components/auth/PasswordChangeGate.tsx'
 import { AppShell } from './components/layout/AppShell.tsx'
 import { ToastProvider } from './lib/ToastProvider.tsx'
+import { CmsPage } from './pages/CmsPage.tsx'
 import { DashboardPage } from './pages/DashboardPage.tsx'
 import { LoginPage } from './pages/LoginPage.tsx'
 import { NewTicketPage } from './pages/NewTicketPage.tsx'
@@ -35,6 +36,7 @@ export default function App() {
                 <Route path="tickets" element={<TicketListPage />} />
                 <Route path="tickets/new" element={<NewTicketPage />} />
                 <Route path="tickets/:ticketId" element={<TicketDetailPage />} />
+                <Route path="cms" element={<CmsPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
             </Routes>
