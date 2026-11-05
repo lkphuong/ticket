@@ -19,7 +19,12 @@ import type {
 } from '@vtdesk/domain'
 import type { AuthenticatedRequest } from '../middleware/authMiddleware.ts'
 import type { ITicketStore } from '../repositories/interfaces.ts'
-import { TicketAuthorizationError, TicketService, TicketValidationError } from '../tickets/ticketService.ts'
+import {
+  TicketAuthorizationError,
+  TicketNotFoundError,
+  TicketService,
+  TicketValidationError,
+} from '../tickets/ticketService.ts'
 
 // Maps authenticated session into domain Viewer context
 export function toDomainViewer(session: AuthenticatedRequest['viewer']): Viewer {
@@ -165,6 +170,98 @@ export function createTicketRouter(
         error: 'InternalError',
         message: err.message || 'Unable to retrieve ticket details.',
       })
+    }
+  })
+
+  // Assigns a specialist to handle the ticket (Receiving Department Head only)
+  router.patch('/:id/assign', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const member = req.viewer
+      if (!member) {
+        res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' })
+        return
+      }
+
+      const { assigneeName } = req.body
+      if (!assigneeName) {
+        res.status(400).json({ error: 'ValidationError', message: 'Vui lòng chọn người được giao.' })
+        return
+      }
+
+      const ticket = await ticketService.assignTicket(req.params.id, assigneeName, member)
+      res.status(200).json({ ticket })
+    } catch (err: any) {
+      if (err instanceof TicketNotFoundError) {
+        res.status(404).json({ error: 'NotFound', message: err.message })
+        return
+      }
+      if (err instanceof TicketAuthorizationError) {
+        res.status(403).json({ error: 'Forbidden', message: err.message })
+        return
+      }
+      if (err instanceof TicketValidationError) {
+        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
+        return
+      }
+      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to assign ticket.' })
+    }
+  })
+
+  // Updates priority level of ticket
+  router.patch('/:id/priority', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const member = req.viewer
+      if (!member) {
+        res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' })
+        return
+      }
+
+      const { priority } = req.body
+      const ticket = await ticketService.updatePriority(req.params.id, priority, member)
+      res.status(200).json({ ticket })
+    } catch (err: any) {
+      if (err instanceof TicketNotFoundError) {
+        res.status(404).json({ error: 'NotFound', message: err.message })
+        return
+      }
+      if (err instanceof TicketAuthorizationError) {
+        res.status(403).json({ error: 'Forbidden', message: err.message })
+        return
+      }
+      if (err instanceof TicketValidationError) {
+        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
+        return
+      }
+      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to update priority.' })
+    }
+  })
+
+  // Updates resolution due date of ticket
+  router.patch('/:id/due-date', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const member = req.viewer
+      if (!member) {
+        res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' })
+        return
+      }
+
+      const { dueDate } = req.body
+      const ticket = await ticketService.updateDueDate(req.params.id, dueDate, member)
+      res.status(200).json({ ticket })
+    } catch (err: any) {
+      if (err instanceof TicketNotFoundError) {
+        res.status(404).json({ error: 'NotFound', message: err.message })
+        return
+      }
+      if (err instanceof TicketAuthorizationError) {
+        res.status(403).json({ error: 'Forbidden', message: err.message })
+        return
+      }
+      if (err instanceof TicketValidationError) {
+        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
+        return
+      }
+      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to update due date.' })
     }
   })
 
