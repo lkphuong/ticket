@@ -4,6 +4,66 @@ import type { NewTicketInput, Ticket, TicketAttachment, TicketPriority, TicketSt
 
 const TOKEN_KEY = 'vtdesk_session_token'
 
+export interface AppNotification {
+  readonly id: string
+  readonly recipientUsername: string
+  readonly notificationType: string
+  readonly ticketId?: string | null
+  readonly title: string
+  readonly body: string
+  readonly isRead: boolean
+  readonly createdAt: string
+  readonly readAt?: string | null
+}
+
+export interface CmsMember {
+  readonly id: string
+  readonly username: string
+  readonly name: string
+  readonly department: string
+  readonly role: 'staff' | 'head' | 'admin'
+  readonly isDepartmentHead: boolean
+  readonly isActive: boolean
+  readonly requiresPasswordChange: boolean
+  readonly email?: string | null
+  readonly createdAt?: string
+  readonly updatedAt?: string
+}
+
+export interface CmsAuditLog {
+  readonly id: string
+  readonly actorUsername: string
+  readonly actorName: string
+  readonly action: string
+  readonly targetType: string
+  readonly targetId: string
+  readonly details?: any
+  readonly createdAt: string
+}
+
+export interface CmsTemplate {
+  readonly id: string
+  readonly name: string
+  readonly description: string
+  readonly targetDepartment: string
+  readonly suggestedDays: number
+  readonly isActive: boolean
+  readonly values: {
+    readonly title: string
+    readonly description: string
+    readonly purpose: string
+    readonly expectedResult: string
+    readonly priority: TicketPriority
+  }
+}
+
+export interface CmsSla {
+  readonly priority: TicketPriority
+  readonly responseHours: number
+  readonly resolutionHours: number
+  readonly updatedAt?: string
+}
+
 export interface UserSessionProfile {
   readonly id: string
   readonly username: string
@@ -281,6 +341,117 @@ export class ApiClient {
       }
       const query = searchParams.toString()
       return this.request(`/tickets/export${query ? `?${query}` : ''}`, { method: 'GET' })
+    },
+  }
+
+  readonly notifications = {
+    list: async (): Promise<{ notifications: AppNotification[]; unreadCount: number }> => {
+      return this.request('/notifications', { method: 'GET' })
+    },
+    markRead: async (id: string): Promise<void> => {
+      await this.request(`/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' })
+    },
+    markAllRead: async (): Promise<void> => {
+      await this.request('/notifications/read-all', { method: 'PATCH' })
+    },
+    registerDevice: async (token: string): Promise<void> => {
+      await this.request('/notifications/devices', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      })
+    },
+    unregisterDevice: async (token: string): Promise<void> => {
+      await this.request(`/notifications/devices/${encodeURIComponent(token)}`, {
+        method: 'DELETE',
+      })
+    },
+  }
+
+  readonly cms = {
+    getDepartments: async (): Promise<{ departments: string[] }> => {
+      return this.request('/cms/departments', { method: 'GET' })
+    },
+    createDepartment: async (name: string): Promise<void> => {
+      await this.request('/cms/departments', {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+      })
+    },
+    getMembers: async (): Promise<{ members: CmsMember[] }> => {
+      return this.request('/cms/members', { method: 'GET' })
+    },
+    createMember: async (data: {
+      username: string
+      name: string
+      department: string
+      role: 'staff' | 'head' | 'admin'
+      isDepartmentHead?: boolean
+      email?: string
+      tempPassword?: string
+    }): Promise<{ member: CmsMember }> => {
+      return this.request('/cms/members', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      })
+    },
+    updateMember: async (
+      id: string,
+      data: {
+        name?: string
+        department?: string
+        role?: 'staff' | 'head' | 'admin'
+        isDepartmentHead?: boolean
+        email?: string
+      },
+    ): Promise<{ member: CmsMember }> => {
+      return this.request(`/cms/members/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      })
+    },
+    lockMember: async (id: string): Promise<{ reassignedTicketsCount: number }> => {
+      return this.request(`/cms/members/${encodeURIComponent(id)}/lock`, { method: 'POST' })
+    },
+    unlockMember: async (id: string): Promise<void> => {
+      await this.request(`/cms/members/${encodeURIComponent(id)}/unlock`, { method: 'POST' })
+    },
+    resetPassword: async (id: string, tempPassword?: string): Promise<{ temporaryPassword: string }> => {
+      return this.request(`/cms/members/${encodeURIComponent(id)}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ tempPassword }),
+      })
+    },
+    getAuditLogs: async (): Promise<{ auditLogs: CmsAuditLog[] }> => {
+      return this.request('/cms/audit-logs', { method: 'GET' })
+    },
+    getTemplates: async (department?: string): Promise<{ templates: CmsTemplate[] }> => {
+      const query = department ? `?department=${encodeURIComponent(department)}` : ''
+      return this.request(`/cms/templates${query}`, { method: 'GET' })
+    },
+    createTemplate: async (data: any): Promise<{ template: CmsTemplate }> => {
+      return this.request('/cms/templates', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      })
+    },
+    updateTemplate: async (id: string, data: any): Promise<{ template: CmsTemplate }> => {
+      return this.request(`/cms/templates/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      })
+    },
+    getSlas: async (): Promise<{ slas: CmsSla[] }> => {
+      return this.request('/cms/slas', { method: 'GET' })
+    },
+    updateSla: async (
+      priority: TicketPriority,
+      responseHours: number,
+      resolutionHours: number,
+    ): Promise<{ sla: CmsSla }> => {
+      return this.request(`/cms/slas/${encodeURIComponent(priority)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ responseHours, resolutionHours }),
+      })
     },
   }
 

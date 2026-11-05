@@ -1,8 +1,11 @@
+import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { buildInbox } from '../../lib/ticketInbox.ts'
 import { ROLE_LABELS, ROLE_STRIPE_CLASSES, getViewerRole } from '../../lib/viewerRole.ts'
 import { useAuth } from '../../state/useAuth.ts'
 import { useTickets } from '../../state/useTickets.ts'
+import { ProfileSettingsModal } from '../auth/ProfileSettingsModal.tsx'
+import { NotificationBell } from '../notifications/NotificationBell.tsx'
 import { Avatar } from '../ui/Avatar.tsx'
 import { Button } from '../ui/Button.tsx'
 import { Icon } from '../ui/Icon.tsx'
@@ -42,13 +45,13 @@ function WordMark() {
   )
 }
 
-function ViewerSummary() {
+function ViewerSummary({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { viewer } = useTickets()
   const { logout } = useAuth()
   const role = getViewerRole(viewer)
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
       <div className="flex items-center gap-2">
         <span className="flex items-center gap-1.5 text-xs font-semibold text-ink">
           <Avatar department={viewer.department} sizeClass="size-6" />
@@ -59,8 +62,13 @@ function ViewerSummary() {
         </span>
       </div>
 
-      <Button variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs" onClick={() => logout()}>
-        <Icon name="logout" />
+      <Button variant="secondary" className="gap-1 px-2 py-1 text-xs" onClick={onOpenSettings}>
+        <Icon name="cog" className="size-3.5" />
+        Cài đặt
+      </Button>
+
+      <Button variant="secondary" className="gap-1 px-2 py-1 text-xs" onClick={() => logout()}>
+        <Icon name="logout" className="size-3.5" />
         Đăng xuất
       </Button>
     </div>
@@ -70,13 +78,14 @@ function ViewerSummary() {
 export function AppShell() {
   const { tickets, viewer } = useTickets()
   const { pathname } = useLocation()
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const waitingCount = buildInbox(tickets, viewer).reduce((sum, group) => sum + group.tickets.length, 0)
   const role = getViewerRole(viewer)
 
-  // Administrators operate as read-only supervisors and do not create tickets
+  // Administrators operate as read-only supervisors and have CMS administration privileges
   const navItems =
     role === 'admin'
-      ? BASE_NAV_ITEMS
+      ? [...BASE_NAV_ITEMS, { to: '/cms', label: 'Quản trị hệ thống', end: false, icon: 'cog' as IconName }]
       : [...BASE_NAV_ITEMS, { to: NEW_TICKET_PATH, label: 'Tạo yêu cầu', end: true, icon: 'plus' as IconName }]
 
   return (
@@ -87,8 +96,9 @@ export function AppShell() {
           <WordMark />
           <div className="flex items-center gap-3">
             <div className="hidden md:block">
-              <ViewerSummary />
+              <ViewerSummary onOpenSettings={() => setIsSettingsOpen(true)} />
             </div>
+            <NotificationBell />
             <ThemeToggle />
           </div>
         </div>
@@ -118,13 +128,15 @@ export function AppShell() {
         <details className="border-t border-line px-4 py-3 md:hidden">
           <summary className="cursor-pointer text-sm font-medium text-ink-muted">{viewer.name}</summary>
           <div className="mt-3">
-            <ViewerSummary />
+            <ViewerSummary onOpenSettings={() => setIsSettingsOpen(true)} />
           </div>
         </details>
       </header>
       <main className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">
         <Outlet />
       </main>
+
+      <ProfileSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   )
 }
