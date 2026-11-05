@@ -6,6 +6,7 @@ export interface TicketsContextValue {
   tickets: Ticket[]
   viewer: Viewer
   isLoading?: boolean
+  loadError?: string | null
   refreshTickets?: () => Promise<void>
   createTicket: (input: NewTicketInput) => Promise<Ticket>
   changeStatus: (ticketId: string, status: TicketStatus, reason?: string) => Promise<string | null>

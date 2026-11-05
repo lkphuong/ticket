@@ -7,7 +7,7 @@ import {
   TICKET_STATUSES,
 } from '../../domain/ticket.ts'
 import type { TicketPriority, TicketStatus } from '../../domain/ticket.ts'
-import { MEMBERS } from '../../data/members.ts'
+import { useMemberDirectory } from '../../state/useMemberDirectory.ts'
 import { formatDate } from '../../lib/formatDate.ts'
 import { DEFAULT_TICKET_FILTERS } from '../../lib/ticketFilters.ts'
 import type {
@@ -63,10 +63,6 @@ const DUE_OPTIONS: { value: DueFilter; label: string }[] = [
 ]
 
 const ANY_ASSIGNEE_VALUE = ''
-const ASSIGNEE_OPTIONS = [
-  { value: ANY_ASSIGNEE_VALUE, label: 'Mọi người xử lý' },
-  ...MEMBERS.filter((member) => !member.isExecutive && member.username !== 'admin').map((member) => ({ value: member.name, label: member.name })),
-]
 
 const ASSIGNMENT_OPTIONS: { value: AssignmentFilter; label: string }[] = [
   { value: 'all', label: 'Mọi phân công' },
@@ -137,6 +133,11 @@ function describeActiveFilters(filters: TicketFiltersState): ActiveChip[] {
 }
 
 export function TicketFilters({ filters, onChange, onExportCsv }: TicketFiltersProps) {
+  const { members } = useMemberDirectory()
+  const assigneeOptions = [
+    { value: ANY_ASSIGNEE_VALUE, label: 'Mọi người xử lý' },
+    ...members.filter((member) => member.role !== 'admin').map((member) => ({ value: member.name, label: member.name })),
+  ]
   const chips = describeActiveFilters(filters)
   const advancedCount = chips.filter((chip) => chip.key !== 'query').length
   const [advancedOpen, setAdvancedOpen] = useState(advancedCount > 0)
@@ -232,7 +233,7 @@ export function TicketFilters({ filters, onChange, onExportCsv }: TicketFiltersP
           </div>
           <div>
             <span className={FIELD_LABEL_CLASS}>Người xử lý</span>
-            <Select ariaLabel="Lọc theo người xử lý" value={filters.assigneeName ?? ANY_ASSIGNEE_VALUE} options={ASSIGNEE_OPTIONS} onChange={(value) => update('assigneeName', value)} />
+            <Select ariaLabel="Lọc theo người xử lý" value={filters.assigneeName ?? ANY_ASSIGNEE_VALUE} options={assigneeOptions} onChange={(value) => update('assigneeName', value)} />
           </div>
           <div>
             <span className={FIELD_LABEL_CLASS}>Tạo từ ngày</span>

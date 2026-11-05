@@ -64,6 +64,14 @@ export interface CmsSla {
   readonly updatedAt?: string
 }
 
+export interface DirectoryMember {
+  readonly username: string
+  readonly name: string
+  readonly department: string
+  readonly role: 'staff' | 'head' | 'admin'
+  readonly isDepartmentHead: boolean
+}
+
 export interface UserSessionProfile {
   readonly id: string
   readonly username: string
@@ -101,6 +109,12 @@ export class ApiError extends Error {
 }
 
 let inMemoryToken: string | null = null
+let sessionExpiredHandler: (() => void) | null = null
+
+// Lets the auth layer react once when the API rejects a stored session token
+export function setSessionExpiredHandler(handler: (() => void) | null): void {
+  sessionExpiredHandler = handler
+}
 
 // Translates API response codes and error bodies into contextual Vietnamese messages
 function toVietnameseErrorMessage(status: number, message?: string, errors?: Record<string, string>): string {
@@ -202,6 +216,8 @@ export class ApiClient {
     }
 
     if (!response.ok) {
+      // Auth endpoints report their own credential failures, so only data calls signal an expired session
+      if (response.status === 401 && token && sessionExpiredHandler && !endpoint.startsWith('/auth/')) sessionExpiredHandler()
       const message = toVietnameseErrorMessage(response.status, payload?.message, payload?.errors)
       throw new ApiError(message, response.status, payload?.error, payload?.errors)
     }
@@ -364,6 +380,12 @@ export class ApiClient {
       await this.request(`/notifications/devices/${encodeURIComponent(token)}`, {
         method: 'DELETE',
       })
+    },
+  }
+
+  readonly members = {
+    directory: async (): Promise<{ members: DirectoryMember[] }> => {
+      return this.request('/members/directory', { method: 'GET' })
     },
   }
 

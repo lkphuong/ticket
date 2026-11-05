@@ -37,6 +37,7 @@ const EMPTY_INPUT: NewTicketInput = {
 
 export function NewTicketPage() {
   const { viewer, createTicket } = useTickets()
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const { notify } = useToast()
   const navigate = useNavigate()
   const [input, setInput] = useState<NewTicketInput>(EMPTY_INPUT)
@@ -100,12 +101,14 @@ export function NewTicketPage() {
       notify('Vui lòng kiểm tra và hoàn thiện các mục bắt buộc', 'danger')
       return
     }
+    setIsSubmitting(true)
     try {
       const ticket = await createTicket(input)
       notify(`Đã gửi yêu cầu ${ticket.code} thành công`, 'success')
       navigate(`/tickets/${ticket.id}`)
-    } catch (err: any) {
-      notify(err.message || 'Không thể tạo yêu cầu', 'danger')
+    } catch (err: unknown) {
+      notify(err instanceof Error && err.message ? err.message : 'Không thể tạo yêu cầu', 'danger')
+      setIsSubmitting(false)
     }
   }
 
@@ -303,7 +306,9 @@ export function NewTicketPage() {
           <Button variant="secondary" onClick={() => navigate(-1)}>
             Hủy bỏ
           </Button>
-          <Button type="submit">Gửi yêu cầu</Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Đang gửi...' : 'Gửi yêu cầu'}
+          </Button>
         </div>
       </form>
     </>

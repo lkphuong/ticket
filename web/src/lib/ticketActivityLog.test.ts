@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Ticket, TicketActor } from '../domain/ticket.ts'
-import { ticketsReducer } from '../state/ticketsReducer.ts'
-import type { TicketsAction } from '../state/ticketsReducer.ts'
+import { ticketsReducer } from '@vtdesk/domain'
+import type { TicketsAction } from '@vtdesk/domain'
 import { buildActivityLog } from './ticketActivityLog.ts'
 
 const requester: TicketActor = { name: 'Bình', department: 'Marketing' }

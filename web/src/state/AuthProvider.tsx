@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Department, Viewer } from '../domain/ticket.ts'
-import { ApiError, apiClient, getStoredSessionToken, setStoredSessionToken } from '../lib/apiClient.ts'
+import { ApiError, apiClient, getStoredSessionToken, setSessionExpiredHandler, setStoredSessionToken } from '../lib/apiClient.ts'
 import type { UserSessionProfile } from '../lib/apiClient.ts'
 import { AuthContext } from './authContext.ts'
 import type { AuthContextValue } from './authContext.ts'
@@ -30,6 +30,17 @@ function toViewer(user: UserSessionProfile): Viewer {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [viewer, setViewer] = useState<Viewer | null>(null)
   const [isLoading, setIsLoading] = useState<boolean>(() => Boolean(getStoredSessionToken()))
+  const [sessionExpired, setSessionExpired] = useState(false)
+
+  // Returns the viewer to the login page when the API rejects the session mid-use
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      setStoredSessionToken(null)
+      setViewer(null)
+      setSessionExpired(true)
+    })
+    return () => setSessionExpiredHandler(null)
+  }, [])
 
   // Restores authenticated session on initial page load
   useEffect(() => {
@@ -63,6 +74,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const login = useCallback(async (usernameRaw: string, passwordRaw: string): Promise<boolean> => {
     const res = await apiClient.auth.login(usernameRaw, passwordRaw)
+    setSessionExpired(false)
     setViewer(toViewer(res.user))
     return true
   }, [])
@@ -89,8 +101,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ viewer, isLoading, login, logout, changePassword }),
-    [viewer, isLoading, login, logout, changePassword],
+    () => ({ viewer, isLoading, sessionExpired, login, logout, changePassword }),
+    [viewer, isLoading, sessionExpired, login, logout, changePassword],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

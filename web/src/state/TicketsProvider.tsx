@@ -7,6 +7,9 @@ import { ApiError, apiClient } from '../lib/apiClient.ts'
 import { TicketsContext } from './ticketsContext.ts'
 import type { TicketsContextValue } from './ticketsContext.ts'
 
+const TICKET_PAGE_LIMIT = 1000
+const LOAD_ERROR_FALLBACK = 'Không thể tải danh sách yêu cầu. Vui lòng thử lại.'
+
 interface TicketsProviderProps {
   viewer: Viewer
   children: ReactNode
@@ -15,35 +18,35 @@ interface TicketsProviderProps {
 export function TicketsProvider({ viewer, children }: TicketsProviderProps) {
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Synchronizes tickets from the API conforming to viewer role boundaries
   const refreshTickets = useCallback(async () => {
     try {
-      const res = await apiClient.tickets.list({ limit: 1000 })
+      const res = await apiClient.tickets.list({ limit: TICKET_PAGE_LIMIT })
       setTickets(res.tickets)
-    } catch {
-      // Maintain existing cached tickets on transient network hiccups
+      setLoadError(null)
+    } catch (err: unknown) {
+      setLoadError(err instanceof ApiError ? err.message : LOAD_ERROR_FALLBACK)
     } finally {
       setIsLoading(false)
     }
   }, [])
 
+  // The provider remounts on each sign-in, so loading starts true and one fetch per viewer is enough
   useEffect(() => {
     let ignore = false
     apiClient.tickets
-      .list({ limit: 1000 })
+      .list({ limit: TICKET_PAGE_LIMIT })
       .then((res) => {
-        if (!ignore) {
-          setTickets(res.tickets)
-          setIsLoading(false)
-        }
+        if (!ignore) setTickets(res.tickets)
       })
-      .catch(() => {
-        if (!ignore) {
-          setIsLoading(false)
-        }
+      .catch((err: unknown) => {
+        if (!ignore) setLoadError(err instanceof ApiError ? err.message : LOAD_ERROR_FALLBACK)
       })
-
+      .finally(() => {
+        if (!ignore) setIsLoading(false)
+      })
     return () => {
       ignore = true
     }
@@ -173,6 +176,7 @@ export function TicketsProvider({ viewer, children }: TicketsProviderProps) {
       tickets,
       viewer,
       isLoading,
+      loadError,
       refreshTickets,
       createTicket,
       changeStatus,
@@ -188,6 +192,7 @@ export function TicketsProvider({ viewer, children }: TicketsProviderProps) {
       tickets,
       viewer,
       isLoading,
+      loadError,
       refreshTickets,
       createTicket,
       changeStatus,

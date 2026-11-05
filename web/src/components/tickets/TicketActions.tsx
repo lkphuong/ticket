@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MEMBERS } from '../../data/members.ts'
+import { useMemberDirectory } from '../../state/useMemberDirectory.ts'
 import { PRIORITY_LABELS, STATUS_LABELS, TICKET_PRIORITIES } from '../../domain/ticket.ts'
 import type { Ticket, TicketPriority, Viewer } from '../../domain/ticket.ts'
 import {
@@ -45,7 +45,8 @@ interface TicketActionsProps {
 }
 
 function AssignSection({ ticket, onAssign }: Pick<TicketActionsProps, 'ticket' | 'onAssign'>) {
-  const candidates = MEMBERS.filter((member) => member.department === ticket.toDepartment)
+  const { members, isLoading } = useMemberDirectory()
+  const candidates = members.filter((member) => member.department === ticket.toDepartment)
   const [selected, setSelected] = useState(ticket.assigneeName ?? '')
 
   return (
@@ -58,7 +59,7 @@ function AssignSection({ ticket, onAssign }: Pick<TicketActionsProps, 'ticket' |
         value={selected}
         options={candidates.map((member) => ({ value: member.name, label: `${member.name} (${member.username})` }))}
         onChange={setSelected}
-        placeholder="Chọn nhân sự tiếp nhận"
+        placeholder={isLoading ? 'Đang tải danh sách nhân sự...' : 'Chọn nhân sự tiếp nhận'}
       />
       <Button disabled={!selected || selected === ticket.assigneeName} onClick={() => onAssign(selected)}>
         {ticket.assigneeName ? 'Chuyển giao người xử lý' : 'Xác nhận phân công'}
