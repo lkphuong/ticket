@@ -7,3 +7,7 @@ dist-ssr
 .vitest
 web/.vitest
 .worktrees
+
+.env
+.env.*
+!.env.example

@@ -1,0 +1,28 @@
+# VTDesk API
+
+Express API backed by PostgreSQL through Drizzle ORM, run with Bun.
+
+## Setup
+
+1. Install dependencies from the repository root: `bun install`.
+2. Copy `api/.env.example` to `api/.env` and fill in `DATABASE_URL` (and `PORT` or `NODE_ENV` when needed). The `.env` file is git-ignored.
+3. Apply migrations: `bun run db:migrate` (the server also applies them on startup).
+4. Load demo data: `bun run db:seed`.
+5. Start the API: `bun run dev` (default port 3001; the web dev server proxies `/api` to it).
+
+## Demo data
+
+`bun run db:seed` seeds departments, members, request templates, default SLAs and sample tickets.
+
+- It is idempotent: rows that already exist are never overwritten, so re-running it keeps live data.
+- `bun run db:seed -- --reset` clears every application table first. It asks for a typed confirmation, or accepts `--yes` for scripts.
+- It refuses to run when `NODE_ENV=production`.
+- Every seeded account, including `admin`, uses the demo password `ticket123`. Change it before exposing the database.
+
+## Tests
+
+`bun test` from the repository root. Tests use in-memory stores and PGlite, never the real database.
+
+## Deploy
+
+Provide `DATABASE_URL`, `NODE_ENV` and `PORT` as environment variables, then run `bun run start`. Never seed a production database.

@@ -1,6 +1,13 @@
 import { DEPARTMENTS, ENTERPRISE_TEMPLATES, MEMBERS, buildMockTickets } from '@vtdesk/domain'
 import type { ITicketStore } from '../repositories/interfaces.ts'
 
+const DEFAULT_SLAS = [
+  { priority: 'urgent', responseHours: 1, resolutionHours: 4 },
+  { priority: 'high', responseHours: 4, resolutionHours: 24 },
+  { priority: 'medium', responseHours: 8, resolutionHours: 72 },
+  { priority: 'low', responseHours: 24, resolutionHours: 120 },
+] as const
+
 // Seeds baseline enterprise master data and realistic relative mock dataset
 export async function seedDatabase(store: ITicketStore, now: Date = new Date()): Promise<void> {
   // 1. Seed canonical departments
@@ -8,12 +15,18 @@ export async function seedDatabase(store: ITicketStore, now: Date = new Date()):
     await store.departments.create(dept)
   }
 
+  // Existing rows are never overwritten so re-running the seed keeps live data intact
+  const existingUsernames = new Set((await store.members.findAll()).map((member) => member.username))
+  const existingTemplateIds = new Set((await store.templates.findAll()).map((template) => template.id))
+  const existingSlaPriorities = new Set((await store.slas.findAll()).map((sla) => sla.priority))
+
   // 2. Hash standard demo password using Bun bcrypt implementation
   const passwordHash = await Bun.password.hash('ticket123', { algorithm: 'bcrypt', cost: 10 })
 
   // 3. Seed organizational members (Head + Staff for all departments)
   for (let i = 0; i < MEMBERS.length; i++) {
     const m = MEMBERS[i]
+    if (existingUsernames.has(m.username)) continue
     await store.members.save({
       id: `usr-${m.username}`,
       username: m.username,
@@ -29,23 +42,26 @@ export async function seedDatabase(store: ITicketStore, now: Date = new Date()):
   }
 
   // 4. Seed system Administrator account
-  await store.members.save({
-    id: 'usr-admin',
-    username: 'admin',
-    name: 'Quản trị viên Hệ thống',
-    department: 'Công nghệ thông tin',
-    role: 'admin',
-    isDepartmentHead: false,
-    isActive: true,
-    passwordHash,
-    requiresPasswordChange: false,
-    email: 'admin@vtdesk.vn',
-    receiveEmailNotifications: false,
-  })
+  if (!existingUsernames.has('admin')) {
+    await store.members.save({
+      id: 'usr-admin',
+      username: 'admin',
+      name: 'Quản trị viên Hệ thống',
+      department: 'Công nghệ thông tin',
+      role: 'admin',
+      isDepartmentHead: false,
+      isActive: true,
+      passwordHash,
+      requiresPasswordChange: false,
+      email: 'admin@vtdesk.vn',
+      receiveEmailNotifications: false,
+    })
+  }
 
   // 5. Seed request templates
   for (let i = 0; i < ENTERPRISE_TEMPLATES.length; i++) {
     const t = ENTERPRISE_TEMPLATES[i]
+    if (existingTemplateIds.has(t.id)) continue
     await store.templates.save({
       id: t.id,
       targetDepartment: t.targetDepartment,
@@ -59,14 +75,12 @@ export async function seedDatabase(store: ITicketStore, now: Date = new Date()):
   }
 
   // 6. Seed default SLA parameters per priority
-  await store.slas.save({ priority: 'urgent', responseHours: 1, resolutionHours: 4 })
-  await store.slas.save({ priority: 'high', responseHours: 4, resolutionHours: 24 })
-  await store.slas.save({ priority: 'medium', responseHours: 8, resolutionHours: 72 })
-  await store.slas.save({ priority: 'low', responseHours: 24, resolutionHours: 120 })
+  for (const sla of DEFAULT_SLAS) {
+    if (!existingSlaPriorities.has(sla.priority)) await store.slas.save(sla)
+  }
 
   // 7. Seed mock tickets with relative dates covering every department, status and priority
-  const mockTickets = buildMockTickets(now)
-  for (const ticket of mockTickets) {
-    await store.tickets.save(ticket)
+  for (const ticket of buildMockTickets(now)) {
+    if (!(await store.tickets.findById(ticket.id))) await store.tickets.save(ticket)
   }
 }

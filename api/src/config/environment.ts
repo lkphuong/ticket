@@ -5,6 +5,7 @@ export type Environment = 'development' | 'staging' | 'production'
 export interface AppConfig {
   readonly nodeEnv: Environment
   readonly port: number
+  readonly databaseUrl?: string
 }
 
 // Parses and validates port value to ensure bounded numeric network port
@@ -33,5 +34,14 @@ export function loadEnvironmentConfig(env: Record<string, string | undefined> = 
   return {
     nodeEnv: parseEnvironment(env.NODE_ENV),
     port: parsePort(env.PORT, 3001),
+    databaseUrl: env.DATABASE_URL?.trim() || undefined,
   }
+}
+
+// Returns the configured database connection string or fails fast with an actionable message
+export function requireDatabaseUrl(config: AppConfig): string {
+  if (!config.databaseUrl) {
+    throw new Error('DATABASE_URL environment variable is required to start the API. Set it in api/.env.')
+  }
+  return config.databaseUrl
 }

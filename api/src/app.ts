@@ -10,6 +10,7 @@ import { InMemoryTicketStore } from './repositories/inMemoryTicketStore.ts'
 import type { ITicketStore } from './repositories/interfaces.ts'
 import { createAuthRouter } from './routes/authRoutes.ts'
 import { createCmsRouter } from './routes/cmsRoutes.ts'
+import { createMemberDirectoryRouter } from './routes/memberDirectoryRoutes.ts'
 import { createHealthRouter } from './routes/health.ts'
 import { createNotificationRouter } from './routes/notificationRoutes.ts'
 import { createReportRouter } from './routes/reportRoutes.ts'
@@ -67,6 +68,9 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
     const list = await cmsService.listDefaultSlas()
     res.status(200).json({ slas: list })
   })
+
+  // Member directory for pickers and filters
+  app.use('/api/members', createMemberDirectoryRouter(store.members, authMiddleware))
 
   // CMS management routing
   app.use('/api/cms', createCmsRouter(cmsService, authMiddleware))

@@ -1,13 +1,19 @@
 import { createApp } from './app.ts'
-import { loadEnvironmentConfig } from './config/environment.ts'
+import { loadEnvironmentConfig, requireDatabaseUrl } from './config/environment.ts'
+import { createDatabaseConnection } from './db/connection.ts'
+import { runMigrations } from './db/migrator.ts'
 import { DeadlineService } from './notifications/deadlineService.ts'
 import { NotificationService } from './notifications/notificationService.ts'
 import { FirebasePushGateway } from './notifications/pushGateway.ts'
-import { InMemoryTicketStore } from './repositories/inMemoryTicketStore.ts'
+import { PostgresTicketStore } from './repositories/postgresTicketStore.ts'
 
 // Entrypoint executing HTTP listener
 const config = loadEnvironmentConfig()
-const store = new InMemoryTicketStore()
+
+// Fail fast when the database is not configured instead of silently falling back to memory
+const connection = createDatabaseConnection(requireDatabaseUrl(config))
+await runMigrations(connection.executor)
+const store = new PostgresTicketStore(connection.db)
 const pushGateway = new FirebasePushGateway()
 const notificationService = new NotificationService(store, undefined, () => new Date(), pushGateway)
 const deadlineService = new DeadlineService(store, notificationService)
@@ -32,7 +38,7 @@ function terminate(signal: string): void {
   console.log(`Received ${signal}, shutting down server gracefully...`)
   deadlineService.stopHourlySchedule()
   server.close(() => {
-    process.exit(0)
+    connection.close().finally(() => process.exit(0))
   })
 }
 

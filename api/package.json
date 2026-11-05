@@ -9,7 +9,9 @@
     "start": "bun src/server.ts",
     "test": "bun test",
     "lint": "oxlint src",
-    "build": "tsc --noEmit"
+    "build": "tsc --noEmit",
+    "db:migrate": "bun src/db/migrateCli.ts",
+    "db:seed": "bun src/db/seedCli.ts"
   },
   "dependencies": {
     "@vtdesk/domain": "workspace:*",

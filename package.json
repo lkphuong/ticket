@@ -7,8 +7,8 @@
     "api"
   ],
   "scripts": {
-    "dev:web": "bun --filter web dev",
-    "dev:api": "bun --filter api dev",
+    "dev:web": "bun --filter ./web dev",
+    "dev:api": "bun --filter @vtdesk/api dev",
     "build": "bun run --filter '*' build",
     "test": "bun test",
     "lint": "oxlint web/src packages/domain/src api/src"
