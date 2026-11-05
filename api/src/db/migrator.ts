@@ -55,12 +55,9 @@ export async function runMigrations(executor: SqlExecutor, migrationsDir?: strin
       .map((statement) => statement.trim())
       .filter((statement) => statement.length > 0)
 
-    for (const statement of statements) {
-      await executor.exec(statement)
-    }
-
-    // Record completed migration step
-    await executor.exec(`INSERT INTO "__drizzle_migrations" (hash) VALUES ('${file}');`)
+    // One multi-statement call runs as an implicit transaction, so a failing file leaves no half-created tables behind
+    const recordStep = `INSERT INTO "__drizzle_migrations" (hash) VALUES ('${file}');`
+    await executor.exec([...statements.map((statement) => (statement.endsWith(';') ? statement : `${statement};`)), recordStep].join('\n'))
     appliedMigrations.push(file)
   }
 

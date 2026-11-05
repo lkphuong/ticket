@@ -13,7 +13,8 @@
     "db:seed": "bun --filter @vtdesk/api db:seed",
     "build": "bun run --filter '*' build",
     "test": "bun test",
-    "lint": "oxlint web/src packages/domain/src api/src"
+    "lint": "oxlint web/src packages/domain/src api/src",
+    "db:drop": "bun --filter @vtdesk/api db:drop"
   },
   "devDependencies": {
     "bun-types": "^1.4.4",

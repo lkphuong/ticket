@@ -1,6 +1,6 @@
-import { createInterface } from 'node:readline/promises'
 import { loadEnvironmentConfig, requireDatabaseUrl } from '../config/environment.ts'
 import { PostgresTicketStore } from '../repositories/postgresTicketStore.ts'
+import { confirmByTyping } from './confirmPrompt.ts'
 import { createDatabaseConnection } from './connection.ts'
 import { runMigrations } from './migrator.ts'
 import { resetDatabase } from './resetDatabase.ts'
@@ -8,14 +8,6 @@ import { seedDatabase } from './seed.ts'
 import { assertSeedAllowed, parseSeedOptions } from './seedOptions.ts'
 
 const RESET_CONFIRMATION_WORD = 'RESET'
-
-// Asks the operator to type a confirmation word before any destructive reset
-async function confirmReset(): Promise<boolean> {
-  const prompt = createInterface({ input: process.stdin, output: process.stdout })
-  const answer = await prompt.question(`This deletes ALL data in the target database. Type ${RESET_CONFIRMATION_WORD} to continue: `)
-  prompt.close()
-  return answer.trim() === RESET_CONFIRMATION_WORD
-}
 
 // Applies migrations then seeds demo data; existing rows are kept unless --reset is confirmed
 async function main(): Promise<void> {
@@ -28,7 +20,7 @@ async function main(): Promise<void> {
     await runMigrations(connection.executor)
 
     if (options.reset) {
-      if (!options.assumeYes && !(await confirmReset())) {
+      if (!options.assumeYes && !(await confirmByTyping('This deletes ALL data in the target database.', RESET_CONFIRMATION_WORD))) {
         console.log('Reset cancelled, no data was changed.')
         return
       }
