@@ -19,6 +19,7 @@ import type {
 } from '@vtdesk/domain'
 import type { AuthenticatedRequest } from '../middleware/authMiddleware.ts'
 import type { ITicketStore } from '../repositories/interfaces.ts'
+import { TicketAuthorizationError, TicketService, TicketValidationError } from '../tickets/ticketService.ts'
 
 // Maps authenticated session into domain Viewer context
 export function toDomainViewer(session: AuthenticatedRequest['viewer']): Viewer {
@@ -34,10 +35,48 @@ export function toDomainViewer(session: AuthenticatedRequest['viewer']): Viewer 
   }
 }
 
-export function createTicketRouter(store: ITicketStore, authMiddleware: any): Router {
+export function createTicketRouter(
+  store: ITicketStore,
+  authMiddleware: any,
+  ticketService: TicketService = new TicketService(store),
+): Router {
   const router = Router()
 
   router.use(authMiddleware)
+
+  // Creates a new ticket
+  router.post('/', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const member = req.viewer
+      if (!member) {
+        res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' })
+        return
+      }
+
+      const ticket = await ticketService.createTicket(req.body, member)
+      res.status(201).json({ ticket })
+    } catch (err: any) {
+      if (err instanceof TicketAuthorizationError) {
+        res.status(403).json({
+          error: 'Forbidden',
+          message: err.message,
+        })
+        return
+      }
+      if (err instanceof TicketValidationError) {
+        res.status(400).json({
+          error: 'ValidationError',
+          message: err.message,
+          errors: err.errors,
+        })
+        return
+      }
+      res.status(500).json({
+        error: 'InternalError',
+        message: err.message || 'Unable to create ticket.',
+      })
+    }
+  })
 
   // Retrieves filtered, search-indexed, paginated ticket collection
   router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> => {

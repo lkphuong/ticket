@@ -12,12 +12,14 @@ import { createAuthRouter } from './routes/authRoutes.ts'
 import { createCmsRouter } from './routes/cmsRoutes.ts'
 import { createHealthRouter } from './routes/health.ts'
 import { createTicketRouter } from './routes/ticketRoutes.ts'
+import { TicketService } from './tickets/ticketService.ts'
 
 export interface AppDependencies {
   readonly store?: ITicketStore
   readonly sessionService?: ISessionService
   readonly authService?: AuthService
   readonly cmsService?: CmsService
+  readonly ticketService?: TicketService
 }
 
 // Factory constructing configured Express application instance
@@ -28,6 +30,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
   const sessionService = deps.sessionService ?? new MemorySessionService()
   const authService = deps.authService ?? new AuthService(store.members, sessionService)
   const cmsService = deps.cmsService ?? new CmsService(store)
+  const ticketService = deps.ticketService ?? new TicketService(store)
   const authMiddleware = createAuthMiddleware(sessionService, store.members)
 
   // Standard JSON payload decoding
@@ -55,7 +58,7 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
   app.use('/api/cms', createCmsRouter(cmsService, authMiddleware))
 
   // Ticket processing and query routing
-  app.use('/api/tickets', createTicketRouter(store, authMiddleware))
+  app.use('/api/tickets', createTicketRouter(store, authMiddleware, ticketService))
 
   // Explicit catch-all handler for undefined routes
   app.use((_req: Request, res: Response) => {

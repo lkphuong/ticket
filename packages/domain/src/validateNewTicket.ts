@@ -28,6 +28,10 @@ export function validateNewTicket(input: NewTicketInput, requester: Viewer, toda
     errors.expectedResult = `Kết quả mong muốn cần ít nhất ${EXPECTED_RESULT_MIN_LENGTH} ký tự để phòng ban nhận biết khi nào yêu cầu hoàn tất.`
   }
 
+  if (!input.priority || !['low', 'medium', 'high', 'urgent'].includes(input.priority)) {
+    errors.priority = 'Vui lòng chọn mức độ ưu tiên hợp lệ.'
+  }
+
   if (!input.toDepartment) errors.toDepartment = 'Vui lòng chọn phòng ban xử lý.'
   else if (input.toDepartment === requester.department) {
     errors.toDepartment = 'Phòng ban xử lý phải khác phòng ban của bạn.'
