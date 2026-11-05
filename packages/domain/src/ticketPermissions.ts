@@ -58,3 +58,26 @@ export function canEditDueDate(ticket: Ticket, viewer: Viewer): boolean {
     () => isActiveTicket(ticket) && (isReceivingHead(ticket, viewer) || ticket.assigneeName === viewer.name),
   )
 }
+
+export interface TicketPermissions {
+  canAssign: boolean
+  canUpdateProgress: boolean
+  canConfirmResult: boolean
+  canReopen: boolean
+  canCancel: boolean
+  canEditPriority: boolean
+  canEditDueDate: boolean
+}
+
+// Aggregates authorization capabilities for the active viewer against a specific ticket
+export function getTicketPermissions(ticket: Ticket, viewer: Viewer): TicketPermissions {
+  return {
+    canAssign: canAssign(ticket, viewer),
+    canUpdateProgress: canUpdateProgress(ticket, viewer),
+    canConfirmResult: canConfirmResult(ticket, viewer),
+    canReopen: canReopen(ticket, viewer),
+    canCancel: canCancel(ticket, viewer),
+    canEditPriority: canEditPriority(ticket, viewer),
+    canEditDueDate: canEditDueDate(ticket, viewer),
+  }
+}

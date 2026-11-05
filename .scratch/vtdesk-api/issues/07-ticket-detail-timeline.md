@@ -4,9 +4,9 @@
 
 **Blocked by:** 06
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Dòng thời gian hợp nhất đúng thứ tự thời gian
-- [ ] Ticket đã hủy hiển thị lý do hủy và kết cục đóng
-- [ ] Ticket ngoài phạm vi nhìn thấy trả 404 cho mọi vai trò
-- [ ] Phản hồi cho biết các thao tác người xem đang được phép làm trên Ticket này
+- [x] Dòng thời gian hợp nhất đúng thứ tự thời gian
+- [x] Ticket đã hủy hiển thị lý do hủy và kết cục đóng
+- [x] Ticket ngoài phạm vi nhìn thấy trả 404 cho mọi vai trò
+- [x] Phản hồi cho biết các thao tác người xem đang được phép làm trên Ticket này
