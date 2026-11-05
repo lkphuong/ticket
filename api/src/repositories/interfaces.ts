@@ -97,6 +97,20 @@ export interface ISlaRepository {
   save(sla: DbDefaultSla): Promise<void>
 }
 
+export interface DbDeviceToken {
+  readonly id: string
+  readonly username: string
+  readonly token: string
+  readonly createdAt?: Date | string
+}
+
+export interface IDeviceTokenRepository {
+  findByUsername(username: string): Promise<DbDeviceToken[]>
+  findAll(): Promise<DbDeviceToken[]>
+  save(deviceToken: DbDeviceToken): Promise<void>
+  deleteByToken(token: string): Promise<void>
+}
+
 // Unified repository store facade separating domain operations from persistence driver
 export interface ITicketStore {
   tickets: ITicketRepository
@@ -106,4 +120,5 @@ export interface ITicketStore {
   slas: ISlaRepository
   notifications: INotificationRepository
   auditLogs: IAuditLogRepository
+  deviceTokens: IDeviceTokenRepository
 }

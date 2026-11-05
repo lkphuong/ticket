@@ -4,11 +4,13 @@ import * as schema from '../db/schema.ts'
 import type {
   DbAuditLog,
   DbDefaultSla,
+  DbDeviceToken,
   DbMember,
   DbNotification,
   DbRequestTemplate,
   IAuditLogRepository,
   IDepartmentRepository,
+  IDeviceTokenRepository,
   IMemberRepository,
   INotificationRepository,
   ISlaRepository,
@@ -460,6 +462,49 @@ export class PostgresAuditLogRepository implements IAuditLogRepository {
   }
 }
 
+export class PostgresDeviceTokenRepository implements IDeviceTokenRepository {
+  constructor(private readonly db: AnyDrizzleDb) {}
+
+  async findByUsername(username: string): Promise<DbDeviceToken[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.deviceTokens)
+      .where(eq(schema.deviceTokens.username, username))
+
+    return rows.map((r: any) => ({
+      id: r.id,
+      username: r.username,
+      token: r.token,
+      createdAt: r.createdAt ? new Date(r.createdAt) : undefined,
+    }))
+  }
+
+  async findAll(): Promise<DbDeviceToken[]> {
+    const rows = await this.db.select().from(schema.deviceTokens)
+    return rows.map((r: any) => ({
+      id: r.id,
+      username: r.username,
+      token: r.token,
+      createdAt: r.createdAt ? new Date(r.createdAt) : undefined,
+    }))
+  }
+
+  async save(deviceToken: DbDeviceToken): Promise<void> {
+    await this.db
+      .insert(schema.deviceTokens)
+      .values({
+        id: deviceToken.id,
+        username: deviceToken.username,
+        token: deviceToken.token,
+      })
+      .onConflictDoNothing()
+  }
+
+  async deleteByToken(token: string): Promise<void> {
+    await this.db.delete(schema.deviceTokens).where(eq(schema.deviceTokens.token, token))
+  }
+}
+
 // Unified PostgreSQL store implementation implementing ITicketStore
 export class PostgresTicketStore implements ITicketStore {
   readonly tickets: PostgresTicketRepository
@@ -469,6 +514,7 @@ export class PostgresTicketStore implements ITicketStore {
   readonly slas: PostgresSlaRepository
   readonly notifications: PostgresNotificationRepository
   readonly auditLogs: PostgresAuditLogRepository
+  readonly deviceTokens: PostgresDeviceTokenRepository
 
   constructor(db: AnyDrizzleDb) {
     this.tickets = new PostgresTicketRepository(db)
@@ -478,5 +524,6 @@ export class PostgresTicketStore implements ITicketStore {
     this.slas = new PostgresSlaRepository(db)
     this.notifications = new PostgresNotificationRepository(db)
     this.auditLogs = new PostgresAuditLogRepository(db)
+    this.deviceTokens = new PostgresDeviceTokenRepository(db)
   }
 }

@@ -1,5 +1,6 @@
 import type { Ticket } from '@vtdesk/domain'
 import type { DbNotification, ITicketStore } from '../repositories/interfaces.ts'
+import type { IPushGateway } from './pushGateway.ts'
 
 export interface INotificationChannel {
   send(notification: DbNotification): Promise<void>
@@ -70,6 +71,7 @@ export class NotificationService {
     private readonly store: ITicketStore,
     private readonly channel: INotificationChannel = new NoopNotificationChannel(),
     private readonly clock: () => Date = () => new Date(),
+    private readonly pushGateway?: IPushGateway,
   ) {}
 
   // Dispatches domain events into targeted recipient in-app notifications
@@ -282,6 +284,36 @@ export class NotificationService {
         }
 
         await this.store.notifications.save(item)
+
+        // Dispatch push notification to all registered user devices
+        if (this.pushGateway) {
+          try {
+            const userDevices = await this.store.deviceTokens.findByUsername(target.username)
+            if (userDevices.length > 0) {
+              const tokens = userDevices.map((d) => d.token)
+              const pushResult = await this.pushGateway.sendToDevices(tokens, {
+                title: target.title,
+                body: target.body,
+                data: ticket.id ? { ticketId: ticket.id } : undefined,
+              })
+
+              // Automatically prune rejected device tokens reported by push provider
+              if (pushResult.invalidTokens && pushResult.invalidTokens.length > 0) {
+                for (const invalidToken of pushResult.invalidTokens) {
+                  await this.store.deviceTokens.deleteByToken(invalidToken)
+                }
+              }
+            }
+          } catch (pushErr: unknown) {
+            // Push delivery errors must only be logged contextually, preserving business flow
+            console.error('[NotificationService] Push delivery failed for recipient:', target.username, {
+              notificationType: event.type,
+              ticketId: ticket.id,
+              error: pushErr instanceof Error ? pushErr.message : String(pushErr),
+            })
+          }
+        }
+
         // Push notification failure must not abort persistence
         this.channel.send(item).catch((err) => {
           console.error(`[NotificationChannel] Failed to deliver push notification: ${err.message}`, {
@@ -297,6 +329,35 @@ export class NotificationService {
         ticketId: event.ticket.id,
       })
     }
+  }
+
+  // Registers a device push token for an authenticated user
+  async registerDeviceToken(username: string, token: string): Promise<void> {
+    const trimmed = token.trim()
+    if (!trimmed) {
+      throw new Error('Device token cannot be empty.')
+    }
+    await this.store.deviceTokens.save({
+      id: `dev-${crypto.randomUUID()}`,
+      username,
+      token: trimmed,
+      createdAt: this.clock(),
+    })
+  }
+
+  // Removes a registered device token when revoked or user logs out
+  async unregisterDeviceToken(token: string): Promise<void> {
+    const trimmed = token.trim()
+    if (!trimmed) {
+      return
+    }
+    await this.store.deviceTokens.deleteByToken(trimmed)
+  }
+
+  // Retrieves registered device tokens for a given username
+  async getDeviceTokens(username: string): Promise<string[]> {
+    const items = await this.store.deviceTokens.findByUsername(username)
+    return items.map((i) => i.token)
   }
 
   // Lists notifications strictly owned by the querying user

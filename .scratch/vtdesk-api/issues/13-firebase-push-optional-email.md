@@ -4,10 +4,10 @@
 
 **Blocked by:** 12
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Một người dùng có nhiều token, token bị Firebase từ chối được tự xóa
-- [ ] Lỗi gửi Firebase chỉ ghi log có ngữ cảnh, không làm hỏng hành động nghiệp vụ
-- [ ] Khóa dịch vụ Firebase đọc từ biến môi trường, không có trong mã nguồn hay log
-- [ ] Email được kiểm tra định dạng, cờ nhận thư mặc định tắt
-- [ ] Cổng gửi Firebase nằm sau một giao diện để test bằng bản giả, không I/O thật
+- [x] Một người dùng có nhiều token, token bị Firebase từ chối được tự xóa
+- [x] Lỗi gửi Firebase chỉ ghi log có ngữ cảnh, không làm hỏng hành động nghiệp vụ
+- [x] Khóa dịch vụ Firebase đọc từ biến môi trường, không có trong mã nguồn hay log
+- [x] Email được kiểm tra định dạng, cờ nhận thư mặc định tắt
+- [x] Cổng gửi Firebase nằm sau một giao diện để test bằng bản giả, không I/O thật

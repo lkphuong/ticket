@@ -1,4 +1,4 @@
-import type { IMemberRepository } from '../repositories/interfaces.ts'
+import type { DbMember, IMemberRepository } from '../repositories/interfaces.ts'
 import type { ISessionService } from './sessionService.ts'
 
 export interface AuthSuccessResult {
@@ -12,6 +12,7 @@ export interface AuthSuccessResult {
     readonly isDepartmentHead: boolean
     readonly requiresPasswordChange: boolean
     readonly email?: string
+    readonly receiveEmailNotifications: boolean
   }
 }
 
@@ -34,6 +35,18 @@ export class PasswordValidationError extends Error {
     super(message)
     this.name = 'PasswordValidationError'
   }
+}
+
+export class ProfileValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ProfileValidationError'
+  }
+}
+
+export interface UpdateProfileInput {
+  readonly email?: string | null
+  readonly receiveEmailNotifications?: boolean
 }
 
 export class AuthService {
@@ -91,8 +104,53 @@ export class AuthService {
         isDepartmentHead: member.isDepartmentHead,
         requiresPasswordChange: member.requiresPasswordChange,
         email: member.email,
+        receiveEmailNotifications: member.receiveEmailNotifications ?? false,
       },
     }
+  }
+
+  // Retrieves member profile by identifier
+  async getMember(userId: string): Promise<DbMember | null> {
+    return await this.memberRepo.findById(userId)
+  }
+
+  // Updates optional email address and notification subscription preference
+  async updateProfile(userId: string, input: UpdateProfileInput): Promise<DbMember> {
+    const member = await this.memberRepo.findById(userId)
+    if (!member) {
+      throw new AuthenticationError('User not found.')
+    }
+
+    let validatedEmail = member.email
+    let receiveEmail = input.receiveEmailNotifications ?? member.receiveEmailNotifications ?? false
+
+    if (input.email !== undefined) {
+      if (input.email === null || input.email.trim() === '') {
+        validatedEmail = undefined
+        // Reset notification preference when email is cleared
+        receiveEmail = false
+      } else {
+        const trimmed = input.email.trim()
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        if (!emailRegex.test(trimmed)) {
+          throw new ProfileValidationError('Email không đúng định dạng.')
+        }
+        validatedEmail = trimmed
+      }
+    }
+
+    // Default flag to false if uninitialized or when email is absent
+    const finalReceiveEmail = validatedEmail ? Boolean(receiveEmail) : false
+
+    const updated: DbMember = {
+      ...member,
+      email: validatedEmail,
+      receiveEmailNotifications: finalReceiveEmail,
+      updatedAt: new Date(),
+    }
+
+    await this.memberRepo.save(updated)
+    return updated
   }
 
   async changePassword(userId: string, currentPasswordRaw: string, newPasswordRaw: string): Promise<void> {
