@@ -4,11 +4,11 @@
 
 **Blocked by:** 07
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Chỉ Chuyên viên được giao cập nhật được tiến độ
-- [ ] Mọi chuyển trạng thái bị cấm đều bị từ chối với thông điệp tiếng Việt
-- [ ] Bình luận ghi tác giả và phòng ban, hỗ trợ tệp đính kèm
-- [ ] Không bình luận được trên Ticket đã đóng
-- [ ] Người gửi trả lời lúc Chờ phản hồi làm Ticket quay lại Đang xử lý
-- [ ] Thời gian tạm dừng SLA khi Chờ phản hồi được tính đúng theo ngày dương lịch
+- [x] Chỉ Chuyên viên được giao cập nhật được tiến độ
+- [x] Mọi chuyển trạng thái bị cấm đều bị từ chối với thông điệp tiếng Việt
+- [x] Bình luận ghi tác giả và phòng ban, hỗ trợ tệp đính kèm
+- [x] Không bình luận được trên Ticket đã đóng
+- [x] Người gửi trả lời lúc Chờ phản hồi làm Ticket quay lại Đang xử lý
+- [x] Thời gian tạm dừng SLA khi Chờ phản hồi được tính đúng theo ngày dương lịch

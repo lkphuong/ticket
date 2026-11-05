@@ -265,5 +265,68 @@ export function createTicketRouter(
     }
   })
 
+  // Updates progress status of ticket (Assigned Specialist only)
+  router.patch('/:id/status', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const member = req.viewer
+      if (!member) {
+        res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' })
+        return
+      }
+
+      const { status, reason } = req.body
+      if (!status) {
+        res.status(400).json({ error: 'ValidationError', message: 'Vui lòng chọn trạng thái mới.' })
+        return
+      }
+
+      const ticket = await ticketService.updateProgress(req.params.id, status, member, reason)
+      res.status(200).json({ ticket })
+    } catch (err: any) {
+      if (err instanceof TicketNotFoundError) {
+        res.status(404).json({ error: 'NotFound', message: err.message })
+        return
+      }
+      if (err instanceof TicketAuthorizationError) {
+        res.status(403).json({ error: 'Forbidden', message: err.message })
+        return
+      }
+      if (err instanceof TicketValidationError) {
+        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
+        return
+      }
+      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to update status.' })
+    }
+  })
+
+  // Adds a comment with optional attachments to the ticket
+  router.post('/:id/comments', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const member = req.viewer
+      if (!member) {
+        res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' })
+        return
+      }
+
+      const { body, attachments } = req.body
+      const result = await ticketService.addComment(req.params.id, body, member, attachments)
+      res.status(201).json(result)
+    } catch (err: any) {
+      if (err instanceof TicketNotFoundError) {
+        res.status(404).json({ error: 'NotFound', message: err.message })
+        return
+      }
+      if (err instanceof TicketAuthorizationError) {
+        res.status(403).json({ error: 'Forbidden', message: err.message })
+        return
+      }
+      if (err instanceof TicketValidationError) {
+        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
+        return
+      }
+      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to post comment.' })
+    }
+  })
+
   return router
 }
