@@ -11,6 +11,7 @@ export interface AppConfig {
   readonly resendFromEmail?: string
   readonly otpHmacSecret?: string
   readonly uploadDir: string
+  readonly adminInitialPassword?: string
 }
 
 const DEFAULT_PORT = 3001
@@ -61,6 +62,7 @@ export function loadEnvironmentConfig(env: Record<string, string | undefined> = 
     resendFromEmail: env.RESEND_FROM_EMAIL?.trim() || undefined,
     otpHmacSecret: env.OTP_HMAC_SECRET?.trim() || undefined,
     uploadDir: env.UPLOAD_DIR?.trim() || DEFAULT_UPLOAD_DIR,
+    adminInitialPassword: env.ADMIN_INITIAL_PASSWORD?.trim() || undefined,
   }
 }
 

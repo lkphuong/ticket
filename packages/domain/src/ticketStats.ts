@@ -35,8 +35,11 @@ export function calculateAverageRating(tickets: Ticket[]): number | null {
 }
 
 // Collects unfinished tickets per receiving department, busiest first
-export function workloadByDepartment(tickets: Ticket[]): DepartmentWorkload[] {
-  return DEPARTMENTS.map((department) => ({
+export function workloadByDepartment(
+  tickets: Ticket[],
+  departments: readonly Department[] = DEPARTMENTS,
+): DepartmentWorkload[] {
+  return departments.map((department) => ({
     department,
     tickets: tickets.filter((ticket) => isActiveTicket(ticket) && ticket.toDepartment === department),
   }))

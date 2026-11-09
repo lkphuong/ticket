@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { DEPARTMENTS } from '../../domain/ticket.ts'
 import { apiClient } from '../../lib/apiClient.ts'
 
 export interface RegistrationDirectory {
@@ -7,9 +6,9 @@ export interface RegistrationDirectory {
   readonly occupiedHeads: Record<string, string>
 }
 
-// Loads the department list and which departments already have a head; falls back to the static catalog offline
+// Loads the department list and which departments already have a head
 export function useRegistrationDirectory(): RegistrationDirectory {
-  const [departments, setDepartments] = useState<readonly string[]>(DEPARTMENTS)
+  const [departments, setDepartments] = useState<readonly string[]>([])
   const [occupiedHeads, setOccupiedHeads] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -22,7 +21,7 @@ export function useRegistrationDirectory(): RegistrationDirectory {
         if (response.occupiedDepartmentHeads) setOccupiedHeads(response.occupiedDepartmentHeads)
       })
       .catch((error: unknown) => {
-        console.warn('Department directory unavailable, using the built-in catalog', error)
+        console.warn('Department directory could not be loaded', error)
       })
     return () => {
       isActive = false

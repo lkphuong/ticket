@@ -47,6 +47,7 @@ Registration emails a 6 digit code valid for 10 minutes, stored only as an HMAC-
 - `bun run db:seed -- --reset` removes existing documents from application collections first after typed confirmation (or accepts `--yes` for automation).
 - Seeding is rejected when `NODE_ENV=production`.
 - Every seeded account, including `admin`, uses the initial password `ticket123`.
+- `bun run db:seed -- --admin-only` seeds just the `admin` account (password from `ADMIN_INITIAL_PASSWORD`, changed at first login) and default SLAs, so the admin sets up departments, members and templates. Combine with `--reset` to start from an empty database.
 
 ## Tests
 

@@ -3,11 +3,15 @@ import { assertSeedAllowed, parseSeedOptions } from './seedOptions.ts'
 
 describe('parseSeedOptions', () => {
   it('should_default_to_non_destructive_when_no_flags_are_given', () => {
-    expect(parseSeedOptions([])).toEqual({ reset: false, assumeYes: false })
+    expect(parseSeedOptions([])).toEqual({ reset: false, assumeYes: false, adminOnly: false })
   })
 
   it('should_enable_reset_and_yes_when_flags_are_given', () => {
-    expect(parseSeedOptions(['--reset', '--yes'])).toEqual({ reset: true, assumeYes: true })
+    expect(parseSeedOptions(['--reset', '--yes'])).toEqual({ reset: true, assumeYes: true, adminOnly: false })
+  })
+
+  it('should_enable_admin_only_when_flag_is_given', () => {
+    expect(parseSeedOptions(['--admin-only']).adminOnly).toBe(true)
   })
 
   it('should_throw_when_flag_is_unknown', () => {

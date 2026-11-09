@@ -5,6 +5,7 @@ import { createDatabaseConnection } from './connection.ts'
 import { runMigrations } from './migrator.ts'
 import { resetDatabase } from './resetDatabase.ts'
 import { seedDatabase } from './seed.ts'
+import { seedAdminOnly } from './seedAdmin.ts'
 import { assertSeedAllowed, parseSeedOptions } from './seedOptions.ts'
 
 const RESET_CONFIRMATION_WORD = 'RESET'
@@ -13,7 +14,8 @@ const RESET_CONFIRMATION_WORD = 'RESET'
 async function main(): Promise<void> {
   const options = parseSeedOptions(process.argv.slice(2))
   const config = loadEnvironmentConfig()
-  assertSeedAllowed(config.nodeEnv)
+  // Demo data uses a well known password; the admin-only bootstrap takes its password from the environment
+  if (!options.adminOnly) assertSeedAllowed(config.nodeEnv)
 
   const connection = createDatabaseConnection(requireMongoUri(config), config.mongodbDbName)
   try {
@@ -28,7 +30,9 @@ async function main(): Promise<void> {
       console.log('All application collections were cleared.')
     }
 
-    await seedDatabase(new MongoTicketStore(connection.db))
+    const store = new MongoTicketStore(connection.db)
+    if (options.adminOnly) await seedAdminOnly(store, config.adminInitialPassword)
+    else await seedDatabase(store)
     console.log('Seed completed.')
   } finally {
     await connection.close()

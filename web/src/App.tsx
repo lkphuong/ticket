@@ -11,6 +11,7 @@ import { NewTicketPage } from './pages/NewTicketPage.tsx'
 import { NotFoundPage } from './pages/NotFoundPage.tsx'
 import { TicketDetailPage } from './pages/TicketDetailPage.tsx'
 import { TicketListPage } from './pages/TicketListPage.tsx'
+import { DepartmentDirectoryProvider } from './state/DepartmentDirectoryProvider.tsx'
 import { MemberDirectoryProvider } from './state/MemberDirectoryProvider.tsx'
 import { TicketsProvider } from './state/TicketsProvider.tsx'
 import { getViewerRole } from './lib/viewerRole.ts'
@@ -42,6 +43,7 @@ function AppContent() {
         <LoginPage />
       ) : (
         <PasswordChangeGate>
+          <DepartmentDirectoryProvider>
           <MemberDirectoryProvider>
           <TicketsProvider viewer={viewer}>
             <Routes>
@@ -66,6 +68,7 @@ function AppContent() {
             </Routes>
           </TicketsProvider>
           </MemberDirectoryProvider>
+          </DepartmentDirectoryProvider>
         </PasswordChangeGate>
       )}
     </ToastProvider>

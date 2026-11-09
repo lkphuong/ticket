@@ -1,12 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
-  DEPARTMENTS,
   PRIORITY_LABELS,
   STATUS_LABELS,
   TICKET_PRIORITIES,
   TICKET_STATUSES,
 } from '../../domain/ticket.ts'
-import type { TicketPriority, TicketStatus } from '../../domain/ticket.ts'
+import type { Department, TicketPriority, TicketStatus } from '../../domain/ticket.ts'
+import { useDepartmentDirectory } from '../../state/useDepartmentDirectory.ts'
 import { useMemberDirectory } from '../../state/useMemberDirectory.ts'
 import { formatDate } from '../../lib/formatDate.ts'
 import { DEFAULT_TICKET_FILTERS } from '../../lib/ticketFilters.ts'
@@ -41,19 +41,16 @@ const PRIORITY_OPTIONS = [
   ...TICKET_PRIORITIES.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] })),
 ]
 
-function buildDepartmentOptions(allLabel: string) {
+function buildDepartmentOptions(allLabel: string, departments: readonly Department[]) {
   return [
     { value: 'all' as const, label: allLabel },
-    ...DEPARTMENTS.map((department) => ({
+    ...departments.map((department) => ({
       value: department,
       label: department,
       leading: <DepartmentTile department={department} />,
     })),
   ]
 }
-
-const TO_DEPARTMENT_OPTIONS = buildDepartmentOptions('Mọi phòng ban tiếp nhận')
-const FROM_DEPARTMENT_OPTIONS = buildDepartmentOptions('Mọi phòng ban gửi')
 
 const DUE_OPTIONS: { value: DueFilter; label: string }[] = [
   { value: 'all', label: 'Mọi thời hạn' },
@@ -141,6 +138,9 @@ export function TicketFilters({ filters, onChange, onExportCsv }: TicketFiltersP
   const chips = describeActiveFilters(filters)
   const advancedCount = chips.filter((chip) => chip.key !== 'query').length
   const [advancedOpen, setAdvancedOpen] = useState(advancedCount > 0)
+  const { departments } = useDepartmentDirectory()
+  const toDepartmentOptions = useMemo(() => buildDepartmentOptions('Mọi phòng ban tiếp nhận', departments), [departments])
+  const fromDepartmentOptions = useMemo(() => buildDepartmentOptions('Mọi phòng ban gửi', departments), [departments])
 
   function update<Key extends keyof TicketFiltersState>(key: Key, value: TicketFiltersState[Key]) {
     onChange({ ...filters, [key]: value })
@@ -217,11 +217,11 @@ export function TicketFilters({ filters, onChange, onExportCsv }: TicketFiltersP
           </div>
           <div>
             <span className={FIELD_LABEL_CLASS}>Phòng ban gửi</span>
-            <Select ariaLabel="Lọc theo phòng ban gửi" value={filters.fromDepartment ?? 'all'} options={FROM_DEPARTMENT_OPTIONS} onChange={(value) => update('fromDepartment', value)} />
+            <Select ariaLabel="Lọc theo phòng ban gửi" value={filters.fromDepartment ?? 'all'} options={fromDepartmentOptions} onChange={(value) => update('fromDepartment', value)} />
           </div>
           <div>
             <span className={FIELD_LABEL_CLASS}>Phòng ban tiếp nhận</span>
-            <Select ariaLabel="Lọc theo phòng ban xử lý" value={filters.department} options={TO_DEPARTMENT_OPTIONS} onChange={(value) => update('department', value)} />
+            <Select ariaLabel="Lọc theo phòng ban xử lý" value={filters.department} options={toDepartmentOptions} onChange={(value) => update('department', value)} />
           </div>
           <div>
             <span className={FIELD_LABEL_CLASS}>Thời hạn SLA</span>

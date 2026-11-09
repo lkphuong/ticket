@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { DEPARTMENTS, isActiveTicket, isTicketOverdue } from '../domain/ticket.ts'
+import { isActiveTicket, isTicketOverdue } from '../domain/ticket.ts'
 import { buildDashboardKpis } from '../lib/dashboardSummary.ts'
 import { buildInbox } from '../lib/ticketInbox.ts'
 import { buildDepartmentReport, filterByDepartmentView } from '../lib/ticketReport.ts'
@@ -17,14 +17,11 @@ import { StatusBreakdown } from '../components/tickets/StatusBreakdown.tsx'
 import { TicketListPanel } from '../components/tickets/TicketListPanel.tsx'
 import { TicketRow } from '../components/tickets/TicketRow.tsx'
 import { WorkloadMosaic } from '../components/tickets/WorkloadMosaic.tsx'
+import { useDepartmentDirectory } from '../state/useDepartmentDirectory.ts'
 import { useTickets } from '../state/useTickets.ts'
 import type { Department } from '../domain/ticket.ts'
 
 const ALL_DEPARTMENTS_VALUE = 'all'
-const DEPARTMENT_VIEW_OPTIONS = [
-  { value: ALL_DEPARTMENTS_VALUE, label: 'Toàn công ty' },
-  ...DEPARTMENTS.map((department) => ({ value: department as string, label: department })),
-]
 
 const ROLE_DESCRIPTIONS = {
   member: 'Hàng đợi các việc chờ bạn xử lý, yêu cầu bạn đã gửi và các nhiệm vụ đang phụ trách.',
@@ -35,6 +32,14 @@ const ROLE_DESCRIPTIONS = {
 export function DashboardPage() {
   const { tickets: visibleTickets, viewer } = useTickets()
   const [now] = useState(() => new Date())
+  const { departments } = useDepartmentDirectory()
+  const departmentViewOptions = useMemo(
+    () => [
+      { value: ALL_DEPARTMENTS_VALUE, label: 'Toàn công ty' },
+      ...departments.map((department) => ({ value: department as string, label: department })),
+    ],
+    [departments],
+  )
   const [departmentView, setDepartmentView] = useState<Department | typeof ALL_DEPARTMENTS_VALUE>(ALL_DEPARTMENTS_VALUE)
   const role = getViewerRole(viewer)
   // Administrators inspect company-wide metrics through optional department views
@@ -46,7 +51,7 @@ export function DashboardPage() {
   // Heads inspect department scope; administrators oversee enterprise-wide activities
   const overdueScope = role === 'head' ? departmentTickets : tickets
   const overdueTickets = overdueScope.filter((ticket) => isTicketOverdue(ticket, now))
-  const workload = workloadByDepartment(tickets)
+  const workload = workloadByDepartment(tickets, departments)
   const kpis = buildDashboardKpis(role, tickets, viewer, now)
 
   const inboxPanel = (
@@ -148,7 +153,7 @@ export function DashboardPage() {
             <Select
               id="department-view"
               value={departmentView}
-              options={DEPARTMENT_VIEW_OPTIONS}
+              options={departmentViewOptions}
               onChange={(value) => setDepartmentView(value as Department | typeof ALL_DEPARTMENTS_VALUE)}
             />
           </div>

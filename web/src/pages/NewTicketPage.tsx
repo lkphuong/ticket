@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { DEPARTMENTS, PRIORITY_LABELS, TICKET_PRIORITIES } from '../domain/ticket.ts'
+import { PRIORITY_LABELS, TICKET_PRIORITIES } from '../domain/ticket.ts'
 import type { Department, NewTicketInput } from '../domain/ticket.ts'
 import { apiClient } from '../lib/apiClient.ts'
 import { describeOversizedFiles, selectAttachmentFiles } from '../lib/attachmentFiles.ts'
@@ -21,6 +21,7 @@ import { SelectedFileList } from '../components/tickets/SelectedFileList.tsx'
 import { PageHeader } from '../components/ui/PageHeader.tsx'
 import { Select } from '../components/ui/Select.tsx'
 import { toIsoDate } from '../lib/calendar.ts'
+import { useDepartmentDirectory } from '../state/useDepartmentDirectory.ts'
 import { useTickets } from '../state/useTickets.ts'
 
 const MILLISECONDS_IN_DAY = 86400000
@@ -42,6 +43,7 @@ export function NewTicketPage() {
   const { viewer, createTicket } = useTickets()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { notify } = useToast()
+  const { departments } = useDepartmentDirectory()
   const navigate = useNavigate()
   const [input, setInput] = useState<NewTicketInput>(EMPTY_INPUT)
   const [errors, setErrors] = useState<NewTicketErrors>({})
@@ -119,7 +121,7 @@ export function NewTicketPage() {
     }
   }
 
-  const departmentOptions = DEPARTMENTS.filter((department) => department !== viewer.department).map((department) => ({
+  const departmentOptions = departments.filter((department) => department !== viewer.department).map((department) => ({
     value: department,
     label: department,
     leading: <DepartmentTile department={department} />,

@@ -1,6 +1,4 @@
 import type { ReactNode } from 'react'
-import { DEPARTMENTS } from '../../domain/ticket.ts'
-import { DepartmentTile } from '../ui/DepartmentTile.tsx'
 import type { AuthMode } from './authMode.ts'
 
 interface AuthLayoutProps {
@@ -29,21 +27,12 @@ function BrandHero() {
 
       <div className="flex max-w-md flex-col gap-3">
         <h1 className="text-2xl font-bold leading-tight tracking-tight text-ink lg:text-3xl">
-          Điều phối yêu cầu liên phòng ban, đúng hạn cam kết
+          Việc đã giao, không để rơi
         </h1>
         <p className="text-sm leading-relaxed text-ink-muted">
-          Mỗi yêu cầu có phòng ban gửi, phòng ban nhận và thời hạn xử lý rõ ràng, để không việc nào bị bỏ sót giữa các khối.
+          VTDesk giúp mỗi yêu cầu luôn có người nhận và hạn xử lý.
         </p>
       </div>
-
-      <ul aria-label="Các phòng ban sử dụng hệ thống" className="hidden flex-wrap gap-x-4 gap-y-2 lg:flex">
-        {DEPARTMENTS.map((department) => (
-          <li key={department} className="flex items-center gap-2 text-sm text-ink-muted">
-            <DepartmentTile department={department} sizeClass="size-6" />
-            {department}
-          </li>
-        ))}
-      </ul>
     </section>
   )
 }

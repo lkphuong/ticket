@@ -138,6 +138,31 @@ describe('Authentication & Session Management', () => {
     expect(newLoginRes.body.user.requiresPasswordChange).toBe(false)
   })
 
+  it('should_allow_protected_endpoints_with_same_token_when_temporary_password_was_just_changed', async () => {
+    const { app, store } = await setupApp()
+    const member = await store.members.findByUsername('thuha')
+    if (member) {
+      await store.members.save({ ...member, requiresPasswordChange: true })
+    }
+
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'thuha', password: 'ticket123' })
+    const token = loginRes.body.token
+
+    const blockedRes = await request(app).get('/api/templates').set('Authorization', `Bearer ${token}`)
+    expect(blockedRes.status).toBe(403)
+    expect(blockedRes.body.error).toBe('PasswordChangeRequired')
+
+    await request(app)
+      .post('/api/auth/change-password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ currentPassword: 'ticket123', newPassword: 'newSecurePassword456' })
+
+    const allowedRes = await request(app).get('/api/templates').set('Authorization', `Bearer ${token}`)
+    expect(allowedRes.status).toBe(200)
+  })
+
   it('should_enforce_role_and_department_head_guards_correctly', () => {
     const reqStaff: any = { viewer: { role: 'staff', isDepartmentHead: false } }
     const reqHead: any = { viewer: { role: 'head', isDepartmentHead: true } }

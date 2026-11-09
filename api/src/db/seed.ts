@@ -1,7 +1,7 @@
 import { DEPARTMENTS, DEPARTMENT_CODE_PREFIXES, ENTERPRISE_TEMPLATES, MEMBERS, buildMockTickets, deterministicUuid } from '@vtdesk/domain'
 import type { ITicketStore } from '../repositories/interfaces.ts'
 
-const DEFAULT_SLAS = [
+export const DEFAULT_SLAS = [
   { priority: 'urgent', responseHours: 1, resolutionHours: 4 },
   { priority: 'high', responseHours: 4, resolutionHours: 24 },
   { priority: 'medium', responseHours: 8, resolutionHours: 72 },

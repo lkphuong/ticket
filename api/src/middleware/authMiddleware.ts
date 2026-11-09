@@ -55,8 +55,8 @@ export function createAuthMiddleware(sessionService: ISessionService, memberRepo
     req.viewer = session
     req.sessionToken = token
 
-    // Enforce temporary password change restriction
-    if (session.requiresPasswordChange) {
+    // The member record is the source of truth: the session snapshot goes stale once the password is changed
+    if (member.requiresPasswordChange) {
       const allowedPaths = ['/api/auth/change-password', '/api/auth/me', '/api/auth/logout', '/change-password', '/me', '/logout']
       const path = req.path.toLowerCase()
       const isAllowed = allowedPaths.some((p) => path.endsWith(p))
