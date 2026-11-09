@@ -9,10 +9,12 @@ import type { ISessionService } from './auth/sessionService.ts'
 import { CmsService } from './cms/cmsService.ts'
 import type { AppConfig } from './config/environment.ts'
 import { createAuthMiddleware } from './middleware/authMiddleware.ts'
+import { createSecurityHeaders } from './middleware/securityHeaders.ts'
 import { InMemoryTicketStore } from './repositories/inMemoryTicketStore.ts'
 import type { ITicketStore } from './repositories/interfaces.ts'
 import { createAttachmentRouter } from './routes/attachmentRoutes.ts'
 import { createAuthRouter } from './routes/authRoutes.ts'
+import type { AuthRateLimitOptions } from './routes/authRoutes.ts'
 import { createCmsRouter } from './routes/cmsRoutes.ts'
 import { createMemberDirectoryRouter } from './routes/memberDirectoryRoutes.ts'
 import { createHealthRouter } from './routes/health.ts'
@@ -38,7 +40,10 @@ export interface AppDependencies {
   readonly reportService?: ReportService
   readonly ticketService?: TicketService
   readonly attachmentStorage?: IAttachmentStorage
+  readonly authRateLimits?: AuthRateLimitOptions
 }
+
+const JSON_BODY_LIMIT = '1mb'
 
 // Factory constructing configured Express application instance
 export function createApp(config: AppConfig, deps: AppDependencies = {}): Express {
@@ -68,17 +73,19 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
   const attachmentStorage = deps.attachmentStorage ?? new DiskAttachmentStorage(config.uploadDir)
   const authMiddleware = createAuthMiddleware(sessionService, store.members)
 
+  app.use(createSecurityHeaders(config.nodeEnv === 'production'))
+
   // Attachment content is raw bytes, so it is mounted before the JSON body parser
   app.use('/api/attachments', createAttachmentRouter(attachmentStorage, authMiddleware))
 
   // Standard JSON payload decoding
-  app.use(express.json())
+  app.use(express.json({ limit: JSON_BODY_LIMIT }))
 
   // Health and diagnostics routing
   app.use('/health', createHealthRouter(config))
 
   // Authentication routing
-  app.use('/api/auth', createAuthRouter(authService, authMiddleware))
+  app.use('/api/auth', createAuthRouter(authService, authMiddleware, deps.authRateLimits))
 
   // General authenticated template and SLA discovery endpoints (Staff, Head, Admin)
   app.get('/api/templates', authMiddleware, async (req: Request, res: Response) => {
@@ -116,7 +123,11 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
   })
 
   // Centralized error handling middleware preventing uncaught exception leaks
-  app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: Error & { type?: string }, _req: Request, res: Response, _next: NextFunction) => {
+    if (err.type === 'entity.too.large') {
+      res.status(413).json({ error: 'PayloadTooLarge', message: 'Request body is too large.' })
+      return
+    }
     res.status(500).json({
       error: 'Internal Server Error',
       message: config.nodeEnv === 'production' ? 'An unexpected error occurred.' : err.message,

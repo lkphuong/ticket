@@ -11,8 +11,41 @@ import {
 } from '../auth/authService.ts'
 import { VerificationError } from '../auth/verificationErrors.ts'
 import type { AuthenticatedRequest } from '../middleware/authMiddleware.ts'
+import { createRateLimiter, resolveAccountIdentifierKey, resolveClientAddressKey } from '../middleware/rateLimiter.ts'
 
 const RETRY_AFTER_HEADER = 'Retry-After'
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
+const MAX_REQUESTS_PER_ADDRESS = 60
+const MAX_REQUESTS_PER_ACCOUNT = 10
+const ACCOUNT_IDENTIFIER_FIELDS = ['username', 'identifier', 'email'] as const
+
+export interface AuthRateLimitOptions {
+  readonly windowMs: number
+  readonly maxRequestsPerAddress: number
+  readonly maxRequestsPerAccount: number
+}
+
+const DEFAULT_RATE_LIMITS: AuthRateLimitOptions = {
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  maxRequestsPerAddress: MAX_REQUESTS_PER_ADDRESS,
+  maxRequestsPerAccount: MAX_REQUESTS_PER_ACCOUNT,
+}
+
+// One limiter pair per public endpoint so a burst on login does not lock out verification
+function createPublicEndpointLimiters(scope: string, limits: AuthRateLimitOptions) {
+  return [
+    createRateLimiter({
+      windowMs: limits.windowMs,
+      maxRequests: limits.maxRequestsPerAddress,
+      resolveKey: resolveClientAddressKey(scope),
+    }),
+    createRateLimiter({
+      windowMs: limits.windowMs,
+      maxRequests: limits.maxRequestsPerAccount,
+      resolveKey: resolveAccountIdentifierKey(scope, ACCOUNT_IDENTIFIER_FIELDS),
+    }),
+  ]
+}
 
 // Writes a verification failure with its own status, code and details; returns false for unrelated errors
 function respondVerificationError(res: Response, err: unknown): boolean {
@@ -24,10 +57,14 @@ function respondVerificationError(res: Response, err: unknown): boolean {
   return true
 }
 
-export function createAuthRouter(authService: AuthService, authMiddleware: any): Router {
+export function createAuthRouter(
+  authService: AuthService,
+  authMiddleware: any,
+  rateLimits: AuthRateLimitOptions = DEFAULT_RATE_LIMITS,
+): Router {
   const router = Router()
 
-  router.post('/login', async (req: Request, res: Response): Promise<void> => {
+  router.post('/login', ...createPublicEndpointLimiters('login', rateLimits), async (req: Request, res: Response): Promise<void> => {
     try {
       const { username, password } = req.body ?? {}
       const result = await authService.login(username, password)
@@ -62,7 +99,7 @@ export function createAuthRouter(authService: AuthService, authMiddleware: any):
   })
 
   // Handles public self-registration with organizational rules and email verification dispatch
-  router.post('/register', async (req: Request, res: Response): Promise<void> => {
+  router.post('/register', ...createPublicEndpointLimiters('register', rateLimits), async (req: Request, res: Response): Promise<void> => {
     try {
       const { username, name, department, role, email, password } = req.body ?? {}
       const result = await authService.register({
@@ -90,7 +127,7 @@ export function createAuthRouter(authService: AuthService, authMiddleware: any):
   })
 
   // Confirms verification security token and activates the account for login
-  router.post('/verify-email', async (req: Request, res: Response): Promise<void> => {
+  router.post('/verify-email', ...createPublicEndpointLimiters('verify-email', rateLimits), async (req: Request, res: Response): Promise<void> => {
     try {
       const { token, identifier, email, username } = req.body ?? {}
       const result = await authService.verifyEmail(token, identifier || email || username)
@@ -109,7 +146,7 @@ export function createAuthRouter(authService: AuthService, authMiddleware: any):
   })
 
   // Re-emits a fresh verification code for pending registrations, at most once per cooldown window
-  router.post('/resend-verification', async (req: Request, res: Response): Promise<void> => {
+  router.post('/resend-verification', ...createPublicEndpointLimiters('resend-verification', rateLimits), async (req: Request, res: Response): Promise<void> => {
     try {
       const { identifier } = req.body ?? {}
       await authService.resendVerification(identifier)
