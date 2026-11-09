@@ -9,6 +9,7 @@ export const COLLECTION_NAMES = {
   NOTIFICATIONS: 'notifications',
   AUDIT_LOGS: 'audit_logs',
   DEVICE_TOKENS: 'device_tokens',
+  SESSIONS: 'sessions',
 } as const
 
 export type CollectionName = (typeof COLLECTION_NAMES)[keyof typeof COLLECTION_NAMES]
@@ -232,4 +233,17 @@ export const COLLECTION_VALIDATORS: Record<string, Record<string, unknown>> = {
       },
     },
   },
+}
+
+// Login session keyed by the SHA-256 hash of the bearer token so a database leak does not expose usable tokens
+export interface SessionDocument {
+  _id: string
+  userId: string
+  username: string
+  name: string
+  department: string
+  role: 'staff' | 'head' | 'admin'
+  isDepartmentHead: boolean
+  requiresPasswordChange: boolean
+  expiresAt: Date
 }

@@ -1,4 +1,5 @@
 import { createApp } from './app.ts'
+import { MongoSessionService } from './auth/mongoSessionService.ts'
 import { loadEnvironmentConfig, requireMongoUri } from './config/environment.ts'
 import { createDatabaseConnection } from './db/connection.ts'
 import { runMigrations } from './db/migrator.ts'
@@ -31,6 +32,7 @@ const app = createApp(config, {
   deadlineService,
   pushGateway,
   emailService,
+  sessionService: new MongoSessionService(connection.db),
 })
 
 const server = app.listen(config.port, () => {

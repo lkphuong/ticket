@@ -77,5 +77,10 @@ export async function ensureMongoIndexes(db: Db): Promise<string[]> {
   await deviceColl.createIndex({ username: 1 })
   created.push('indexes:device_tokens')
 
+  // Sessions are removed by MongoDB itself once expiresAt has passed
+  const sessionColl = db.collection(COLLECTION_NAMES.SESSIONS)
+  await sessionColl.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+  created.push('indexes:sessions')
+
   return created
 }
