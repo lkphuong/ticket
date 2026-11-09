@@ -100,6 +100,26 @@ export function TicketsProvider({ viewer, children }: TicketsProviderProps) {
     [],
   )
 
+  const approveResult = useCallback(async (ticketId: string): Promise<string | null> => {
+    try {
+      const res = await apiClient.tickets.approve(ticketId)
+      setTickets((prev) => prev.map((t) => (t.id === ticketId ? res.ticket : t)))
+      return null
+    } catch (err: any) {
+      return err instanceof ApiError ? err.message : 'Không thể duyệt nghiệm thu.'
+    }
+  }, [])
+
+  const rejectApproval = useCallback(async (ticketId: string, reason: string): Promise<string | null> => {
+    try {
+      const res = await apiClient.tickets.rejectApproval(ticketId, reason)
+      setTickets((prev) => prev.map((t) => (t.id === ticketId ? res.ticket : t)))
+      return null
+    } catch (err: any) {
+      return err instanceof ApiError ? err.message : 'Không thể từ chối duyệt nghiệm thu.'
+    }
+  }, [])
+
   const addComment = useCallback(
     async (ticketId: string, body: string, attachments?: TicketAttachment[]): Promise<string | null> => {
       try {
@@ -182,6 +202,8 @@ export function TicketsProvider({ viewer, children }: TicketsProviderProps) {
       changeStatus,
       assignTicket,
       confirmResult,
+      approveResult,
+      rejectApproval,
       addComment,
       changePriority,
       changeDueDate,
@@ -198,6 +220,8 @@ export function TicketsProvider({ viewer, children }: TicketsProviderProps) {
       changeStatus,
       assignTicket,
       confirmResult,
+      approveResult,
+      rejectApproval,
       addComment,
       changePriority,
       changeDueDate,

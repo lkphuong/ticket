@@ -86,11 +86,24 @@ describe('buildActivityLog', () => {
     expect(buildActivityLog(ticket).at(-1)?.kind).toBe('confirmed')
   })
 
+  it('should_record_rejection_reason_when_head_rejects_approval', () => {
+    const ticket = replay([
+      { type: 'assignee_set', ticketId: 'TCK-1', assigneeName: 'Hà', changedAt: at(10), actor: head },
+      { type: 'status_changed', ticketId: 'TCK-1', status: 'resolved', changedAt: at(20), actor: handler },
+      { type: 'result_confirmed', ticketId: 'TCK-1', rating: 3, changedAt: at(30), actor: requester },
+      { type: 'approval_rejected', ticketId: 'TCK-1', reason: 'Thiếu chứng từ', changedAt: at(40), actor: head },
+    ])
+    const last = buildActivityLog(ticket).at(-1)
+    expect(last?.kind).toBe('rework')
+    expect(last?.detail).toBe('Thiếu chứng từ')
+  })
+
   it('should_mark_reopen_when_closed_ticket_is_reopened', () => {
     const ticket = replay([
       { type: 'assignee_set', ticketId: 'TCK-1', assigneeName: 'Hà', changedAt: at(5), actor: head },
       { type: 'status_changed', ticketId: 'TCK-1', status: 'resolved', changedAt: at(8), actor: handler },
       { type: 'result_confirmed', ticketId: 'TCK-1', rating: 4, changedAt: at(10), actor: requester },
+      { type: 'result_approved', ticketId: 'TCK-1', changedAt: at(15), actor: head },
       { type: 'ticket_reopened', ticketId: 'TCK-1', reason: 'Vẫn cần', changedAt: at(20), actor: requester },
     ])
     const last = buildActivityLog(ticket).at(-1)

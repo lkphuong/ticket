@@ -38,6 +38,7 @@ export async function seedDatabase(store: ITicketStore, now: Date = new Date()):
       passwordHash,
       requiresPasswordChange: false,
       receiveEmailNotifications: false,
+      isVerified: true,
     })
   }
 
@@ -55,6 +56,7 @@ export async function seedDatabase(store: ITicketStore, now: Date = new Date()):
       requiresPasswordChange: false,
       email: 'admin@vtdesk.vn',
       receiveEmailNotifications: false,
+      isVerified: true,
     })
   }
 

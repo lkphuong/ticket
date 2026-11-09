@@ -40,6 +40,16 @@ describe('buildInbox', () => {
     expect(groups.map((group) => group.reason)).toEqual(['confirm'])
   })
 
+  it('should_ask_requesting_head_to_approve_when_ticket_is_pending_approval', () => {
+    const requestingHead: Viewer = { name: 'Quân', department: 'Marketing', isDepartmentHead: true }
+    const groups = buildInbox([makeTicket({ status: 'pending_approval' })], requestingHead)
+    expect(groups.map((group) => group.reason)).toEqual(['approve'])
+  })
+
+  it('should_not_ask_receiving_head_to_approve_when_ticket_is_pending_approval', () => {
+    expect(buildInbox([makeTicket({ status: 'pending_approval' })], head)).toEqual([])
+  })
+
   it('should_ask_requester_to_reply_when_ticket_is_waiting', () => {
     const groups = buildInbox([makeTicket({ status: 'waiting', assigneeName: 'Hà' })], staff)
     expect(groups.map((group) => group.reason)).toEqual(['reply'])

@@ -1,20 +1,24 @@
-import { drizzle } from 'drizzle-orm/postgres-js'
-import postgres from 'postgres'
-import type { SqlExecutor } from './migrator.ts'
-import type { AnyDrizzleDb } from '../repositories/postgresTicketStore.ts'
+import type { Db, MongoClient } from 'mongodb'
+import { createMongoConnection } from './mongoConnection.ts'
+import type { MongoDatabaseConnection } from './mongoConnection.ts'
 
 export interface DatabaseConnection {
-  readonly db: AnyDrizzleDb
-  readonly executor: SqlExecutor
+  readonly client: MongoClient
+  readonly db: Db
   readonly close: () => Promise<void>
+  readonly ping: () => Promise<boolean>
 }
 
-// Opens a pooled PostgreSQL connection exposing both the Drizzle client and a raw SQL executor for migrations
-export function createDatabaseConnection(databaseUrl: string): DatabaseConnection {
-  const client = postgres(databaseUrl, { max: 10 })
+// Opens a pooled MongoDB database connection exposing the database handle and lifecycle controls
+export function createDatabaseConnection(uriOrUrl: string, databaseName = 'ticket'): DatabaseConnection {
+  const mongoConn = createMongoConnection(uriOrUrl, databaseName)
   return {
-    db: drizzle(client),
-    executor: { exec: (sql: string) => client.unsafe(sql) },
-    close: () => client.end(),
+    client: mongoConn.client,
+    db: mongoConn.db,
+    close: mongoConn.close,
+    ping: mongoConn.ping,
   }
 }
+
+export { createMongoConnection }
+export type { MongoDatabaseConnection }

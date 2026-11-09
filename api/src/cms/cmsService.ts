@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { deriveDepartmentCodePrefix } from '@vtdesk/domain'
+import type { Department, Ticket } from '@vtdesk/domain'
+import { normalizeSearchText, paginate } from './pagination.ts'
+import type { Page, PageRequest } from './pagination.ts'
 import type { SessionData } from '../auth/sessionService.ts'
 import type { DbAuditLog, DbMember, DbRequestTemplate, ITicketStore } from '../repositories/interfaces.ts'
 
@@ -12,6 +15,24 @@ export interface CreateMemberInput {
   readonly role: 'staff' | 'head' | 'admin'
   readonly tempPassword?: string
   readonly email?: string
+}
+
+export interface MemberListFilters {
+  readonly search?: string
+  readonly department?: string
+  readonly role?: DbMember['role']
+  readonly status?: 'active' | 'locked'
+}
+
+export interface DepartmentSummary {
+  readonly name: string
+  readonly codePrefix: string
+  readonly memberCount: number
+}
+
+export interface UpdateDepartmentInput {
+  readonly name?: string
+  readonly codePrefix?: string
 }
 
 export interface UpdateMemberInput {
@@ -42,8 +63,8 @@ export class CmsService {
       throw new CmsValidationError('Tên phòng ban không được để trống.')
     }
 
-    const existing = await this.store.departments.findAll()
-    if (existing.includes(name)) {
+    const existing = await this.store.departments.findAllWithPrefix()
+    if (existing.some((department) => department.name === name)) {
       throw new CmsValidationError('Phòng ban đã tồn tại.')
     }
 
@@ -52,8 +73,7 @@ export class CmsService {
     if (!CODE_PREFIX_PATTERN.test(codePrefix)) {
       throw new CmsValidationError('Tiền tố mã phải gồm 2 đến 8 chữ cái hoặc số không dấu.')
     }
-    const prefixOwners = await Promise.all(existing.map((department) => this.store.departments.findCodePrefix(department)))
-    if (prefixOwners.includes(codePrefix)) {
+    if (existing.some((department) => department.codePrefix === codePrefix)) {
       throw new CmsValidationError('Tiền tố mã đã được phòng ban khác sử dụng.')
     }
 
@@ -61,8 +81,90 @@ export class CmsService {
     await this.recordAuditLog(actor, 'create_department', 'department', name, { name, codePrefix })
   }
 
+  async updateDepartment(actor: SessionData, currentName: string, updates: UpdateDepartmentInput): Promise<void> {
+    const existing = await this.store.departments.findAllWithPrefix()
+    const current = existing.find((department) => department.name === currentName)
+    if (!current) {
+      throw new CmsValidationError('Không tìm thấy phòng ban.')
+    }
+
+    const nextName = updates.name !== undefined ? updates.name.trim() : currentName
+    if (!nextName) {
+      throw new CmsValidationError('Tên phòng ban không được để trống.')
+    }
+    if (nextName !== currentName && existing.some((department) => department.name === nextName)) {
+      throw new CmsValidationError('Phòng ban đã tồn tại.')
+    }
+
+    const nextPrefix = (updates.codePrefix?.trim() || current.codePrefix).toUpperCase()
+    if (!CODE_PREFIX_PATTERN.test(nextPrefix)) {
+      throw new CmsValidationError('Tiền tố mã phải gồm 2 đến 8 chữ cái hoặc số không dấu.')
+    }
+    if (existing.some((department) => department.name !== currentName && department.codePrefix === nextPrefix)) {
+      throw new CmsValidationError('Tiền tố mã đã được phòng ban khác sử dụng.')
+    }
+
+    await this.store.departments.update(currentName, { name: nextName, codePrefix: nextPrefix })
+    await this.recordAuditLog(actor, 'update_department', 'department', nextName, {
+      previousName: currentName,
+      name: nextName,
+      codePrefix: nextPrefix,
+    })
+  }
+
+  async deleteDepartment(actor: SessionData, name: string): Promise<void> {
+    const existing = await this.store.departments.findAll()
+    if (!existing.includes(name)) {
+      throw new CmsValidationError('Không tìm thấy phòng ban.')
+    }
+
+    // A department that is still referenced would orphan members, tickets or templates
+    const [memberCounts, ticketCount, templates] = await Promise.all([
+      this.store.members.countByDepartment(),
+      this.store.tickets.countByDepartment(name),
+      this.store.templates.findByDepartment(name),
+    ])
+    const memberCount = memberCounts[name] ?? 0
+    if (memberCount > 0) {
+      throw new CmsValidationError(`Phòng "${name}" còn ${memberCount} thành viên. Hãy chuyển hoặc xóa thành viên trước.`)
+    }
+    if (ticketCount > 0) {
+      throw new CmsValidationError(`Phòng "${name}" đã có ${ticketCount} yêu cầu liên quan nên không thể xóa.`)
+    }
+    if (templates.length > 0) {
+      throw new CmsValidationError(`Phòng "${name}" còn ${templates.length} mẫu yêu cầu. Hãy chuyển hoặc xóa mẫu trước.`)
+    }
+
+    await this.store.departments.delete(name)
+    await this.recordAuditLog(actor, 'delete_department', 'department', name, { name })
+  }
+
   async listMembers(): Promise<DbMember[]> {
     return this.store.members.findAll()
+  }
+
+  async listMembersPage(filters: MemberListFilters, request: PageRequest): Promise<Page<DbMember>> {
+    const needle = normalizeSearchText(filters.search ?? '')
+    const members = (await this.store.members.findAll())
+      .filter((m) => !filters.department || m.department === filters.department)
+      .filter((m) => !filters.role || m.role === filters.role)
+      .filter((m) => !filters.status || m.isActive === (filters.status === 'active'))
+      .filter((m) => !needle || normalizeSearchText(`${m.name} ${m.username} ${m.email ?? ''}`).includes(needle))
+      .sort((a, b) => a.name.localeCompare(b.name, 'vi'))
+    return paginate(members, request)
+  }
+
+  async listDepartmentSummaries(search: string | undefined, request: PageRequest): Promise<Page<DepartmentSummary>> {
+    const needle = normalizeSearchText(search ?? '')
+    const [departments, memberCounts] = await Promise.all([
+      this.store.departments.findAllWithPrefix(),
+      this.store.members.countByDepartment(),
+    ])
+    const summaries = departments
+      .filter((department) => !needle || normalizeSearchText(department.name).includes(needle))
+      .map((department) => ({ ...department, memberCount: memberCounts[department.name] ?? 0 }))
+    summaries.sort((a, b) => a.name.localeCompare(b.name, 'vi'))
+    return paginate(summaries, request)
   }
 
   async createMember(actor: SessionData, input: CreateMemberInput): Promise<DbMember> {
@@ -91,10 +193,8 @@ export class CmsService {
     // Enforce strictly one active department head per department
     const isHead = input.role === 'head'
     if (isHead) {
-      const allMembers = await this.store.members.findAll()
-      const existingHead = allMembers.find(
-        (m) => m.department === input.department && m.role === 'head' && m.isActive,
-      )
+      const departmentHeads = await this.store.members.findHeads([input.department])
+      const existingHead = departmentHeads.find((m) => m.role === 'head' && m.isActive)
       if (existingHead) {
         throw new CmsValidationError(`Phòng "${input.department}" đã có Trưởng phòng (${existingHead.name}). Mỗi phòng luôn có đúng một Trưởng phòng.`)
       }
@@ -113,7 +213,7 @@ export class CmsService {
       isActive: true,
       passwordHash,
       requiresPasswordChange: true,
-      email: input.email?.trim() || undefined,
+      email: input.email?.trim().toLowerCase() || undefined,
       receiveEmailNotifications: false,
     }
 
@@ -152,10 +252,8 @@ export class CmsService {
 
     // Validate single department head rule when promoting or moving
     if (nextIsHead && (!member.isDepartmentHead || member.department !== nextDepartment)) {
-      const allMembers = await this.store.members.findAll()
-      const existingHead = allMembers.find(
-        (m) => m.id !== member.id && m.department === nextDepartment && m.role === 'head' && m.isActive,
-      )
+      const departmentHeads = await this.store.members.findHeads([nextDepartment])
+      const existingHead = departmentHeads.find((m) => m.id !== member.id && m.role === 'head' && m.isActive)
       if (existingHead) {
         throw new CmsValidationError(`Phòng "${nextDepartment}" đã có Trưởng phòng (${existingHead.name}). Mỗi phòng luôn có đúng một Trưởng phòng.`)
       }
@@ -163,10 +261,8 @@ export class CmsService {
 
     // Prevent removing the sole department head without replacement
     if (member.isDepartmentHead && !nextIsHead) {
-      const allMembers = await this.store.members.findAll()
-      const otherHeads = allMembers.filter(
-        (m) => m.id !== member.id && m.department === member.department && m.role === 'head' && m.isActive,
-      )
+      const departmentHeads = await this.store.members.findHeads([member.department])
+      const otherHeads = departmentHeads.filter((m) => m.id !== member.id && m.role === 'head' && m.isActive)
       if (otherHeads.length === 0) {
         throw new CmsValidationError(`Không thể giáng chức Trưởng phòng duy nhất của phòng "${member.department}" khi chưa có Trưởng phòng thay thế.`)
       }
@@ -178,7 +274,7 @@ export class CmsService {
       department: nextDepartment,
       role: nextRole,
       isDepartmentHead: nextIsHead,
-      email: updates.email !== undefined ? updates.email.trim() || undefined : member.email,
+      email: updates.email !== undefined ? updates.email.trim().toLowerCase() || undefined : member.email,
     }
 
     await this.store.members.save(updated)
@@ -194,6 +290,39 @@ export class CmsService {
     return updated
   }
 
+  async deleteMember(actor: SessionData, id: string): Promise<void> {
+    const member = await this.store.members.findById(id)
+    if (!member) {
+      throw new CmsValidationError('Không tìm thấy thành viên.')
+    }
+    if (member.id === actor.userId) {
+      throw new CmsValidationError('Không thể xóa chính tài khoản đang đăng nhập.')
+    }
+
+    if (member.isDepartmentHead && member.isActive) {
+      const departmentHeads = await this.store.members.findHeads([member.department])
+      const hasOtherHead = departmentHeads.some(
+        (m) => m.id !== member.id && m.department === member.department && m.role === 'head' && m.isActive,
+      )
+      if (!hasOtherHead) {
+        throw new CmsValidationError(`Không thể xóa Trưởng phòng duy nhất của phòng "${member.department}". Vui lòng chỉ định Trưởng phòng mới trước.`)
+      }
+    }
+
+    // Tickets keep requester and assignee by name, so a member with history is locked instead of deleted
+    const involvedCount = await this.store.tickets.countInvolvingMember(member.name)
+    if (involvedCount > 0) {
+      throw new CmsValidationError(`Thành viên "${member.name}" đã tham gia ${involvedCount} yêu cầu nên không thể xóa. Hãy khóa tài khoản thay thế.`)
+    }
+
+    await this.store.members.delete(member.id)
+    await this.recordAuditLog(actor, 'delete_member', 'member', member.id, {
+      username: member.username,
+      name: member.name,
+      department: member.department,
+    })
+  }
+
   async lockMember(actor: SessionData, id: string): Promise<{ reassignedTicketsCount: number }> {
     const member = await this.store.members.findById(id)
     if (!member) {
@@ -202,10 +331,8 @@ export class CmsService {
 
     // Prevent locking sole active department head
     if (member.isDepartmentHead && member.isActive) {
-      const allMembers = await this.store.members.findAll()
-      const otherHeads = allMembers.filter(
-        (m) => m.id !== member.id && m.department === member.department && m.role === 'head' && m.isActive,
-      )
+      const departmentHeads = await this.store.members.findHeads([member.department])
+      const otherHeads = departmentHeads.filter((m) => m.id !== member.id && m.role === 'head' && m.isActive)
       if (otherHeads.length === 0) {
         throw new CmsValidationError(`Không thể khóa Trưởng phòng duy nhất của phòng "${member.department}". Vui lòng chỉ định Trưởng phòng mới trước.`)
       }
@@ -216,46 +343,12 @@ export class CmsService {
       isActive: false,
     })
 
-    // Return active assigned tickets of locked member back to department queue
-    const allTickets = await this.store.tickets.findAll()
-    const activeStatuses = ['open', 'in_progress', 'waiting']
-    let reassignedCount = 0
-
-    for (const ticket of allTickets) {
-      if (ticket.assigneeName === member.name && activeStatuses.includes(ticket.status)) {
-        const nowIso = new Date().toISOString()
-        const previousStatus = ticket.status
-        const nextStatus = previousStatus === 'in_progress' ? 'open' : previousStatus
-
-        const assignmentHistory = ticket.assignmentHistory ? [...ticket.assignmentHistory] : []
-        assignmentHistory.push({
-          from: member.name,
-          to: 'Chưa phân công',
-          at: nowIso,
-          actor: { name: actor.name, department: actor.department as any },
-        })
-
-        const statusHistory = ticket.statusHistory ? [...ticket.statusHistory] : []
-        if (previousStatus !== nextStatus) {
-          statusHistory.push({
-            status: nextStatus,
-            at: nowIso,
-            reason: `Thành viên ${member.name} bị khóa tài khoản`,
-            actor: { name: actor.name, department: actor.department as any },
-          })
-        }
-
-        await this.store.tickets.save({
-          ...ticket,
-          assigneeName: undefined,
-          status: nextStatus,
-          assignmentHistory,
-          statusHistory,
-          updatedAt: nowIso,
-        })
-        reassignedCount++
-      }
-    }
+    // Return active assigned tickets of locked member back to department queue in one bulk write
+    const assignedTickets = await this.store.tickets.findActiveByAssignee(member.name)
+    const nowIso = new Date().toISOString()
+    const releasedTickets = assignedTickets.map((ticket) => this.releaseTicketFromMember(ticket, member.name, actor, nowIso))
+    await this.store.tickets.saveMany(releasedTickets)
+    const reassignedCount = releasedTickets.length
 
     await this.recordAuditLog(actor, 'lock_member', 'member', member.id, {
       username: member.username,
@@ -263,6 +356,29 @@ export class CmsService {
     })
 
     return { reassignedTicketsCount: reassignedCount }
+  }
+
+  // Returns a ticket to the department queue, recording the handoff and reopening work that was in progress
+  private releaseTicketFromMember(ticket: Ticket, memberName: string, actor: SessionData, nowIso: string): Ticket {
+    const actorRef = { name: actor.name, department: actor.department as Department }
+    const nextStatus = ticket.status === 'in_progress' ? 'open' : ticket.status
+    const statusHistory = [...(ticket.statusHistory ?? [])]
+    if (ticket.status !== nextStatus) {
+      statusHistory.push({
+        status: nextStatus,
+        at: nowIso,
+        reason: `Thành viên ${memberName} bị khóa tài khoản`,
+        actor: actorRef,
+      })
+    }
+    return {
+      ...ticket,
+      assigneeName: undefined,
+      status: nextStatus,
+      assignmentHistory: [...(ticket.assignmentHistory ?? []), { from: memberName, to: 'Chưa phân công', at: nowIso, actor: actorRef }],
+      statusHistory,
+      updatedAt: nowIso,
+    }
   }
 
   async unlockMember(actor: SessionData, id: string): Promise<void> {
@@ -306,6 +422,12 @@ export class CmsService {
 
   async listAuditLogs(): Promise<DbAuditLog[]> {
     return this.store.auditLogs.findAll()
+  }
+
+  async listAuditLogsPage(request: PageRequest): Promise<Page<DbAuditLog>> {
+    const logs = await this.store.auditLogs.findAll()
+    const newestFirst = [...logs].sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
+    return paginate(newestFirst, request)
   }
 
   // Template management operations

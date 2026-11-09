@@ -3,6 +3,9 @@ import type { ChangeEvent, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DEPARTMENTS, PRIORITY_LABELS, TICKET_PRIORITIES } from '../domain/ticket.ts'
 import type { Department, NewTicketInput } from '../domain/ticket.ts'
+import { apiClient } from '../lib/apiClient.ts'
+import { describeOversizedFiles, selectAttachmentFiles } from '../lib/attachmentFiles.ts'
+import type { PickedFile } from '../lib/attachmentFiles.ts'
 import { validateNewTicket } from '../lib/validateNewTicket.ts'
 import type { NewTicketErrors } from '../lib/validateNewTicket.ts'
 import { ENTERPRISE_TEMPLATES } from '../lib/ticketTemplates.ts'
@@ -14,12 +17,12 @@ import { DatePicker } from '../components/ui/DatePicker.tsx'
 import { DepartmentTile } from '../components/ui/DepartmentTile.tsx'
 import { FileInput } from '../components/ui/FileInput.tsx'
 import { FormField } from '../components/ui/FormField.tsx'
+import { SelectedFileList } from '../components/tickets/SelectedFileList.tsx'
 import { PageHeader } from '../components/ui/PageHeader.tsx'
 import { Select } from '../components/ui/Select.tsx'
 import { toIsoDate } from '../lib/calendar.ts'
 import { useTickets } from '../state/useTickets.ts'
 
-const BYTES_PER_KB = 1024
 const MILLISECONDS_IN_DAY = 86400000
 
 const PRIORITY_OPTIONS = TICKET_PRIORITIES.map((priority) => ({ value: priority, label: PRIORITY_LABELS[priority] }))
@@ -43,6 +46,7 @@ export function NewTicketPage() {
   const [input, setInput] = useState<NewTicketInput>(EMPTY_INPUT)
   const [errors, setErrors] = useState<NewTicketErrors>({})
   const [todayIso] = useState(() => toIsoDate(new Date()))
+  const [pickedFiles, setPickedFiles] = useState<PickedFile[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
 
   function update<Key extends keyof NewTicketInput>(key: Key, value: NewTicketInput[Key]) {
@@ -63,51 +67,54 @@ export function NewTicketPage() {
     })
     setSelectedTemplateId(template.id)
     setErrors({})
-    notify(`Đã áp dụng mẫu: ${template.name}`, 'neutral')
+    notify(`Đã áp dụng mẫu: ${template.name}`, 'info')
   }
 
   function clearTemplate() {
     setInput(EMPTY_INPUT)
+    setPickedFiles([])
     setSelectedTemplateId(null)
     setErrors({})
-    notify('Đã làm trống mẫu nhập liệu', 'neutral')
+    notify('Đã làm trống mẫu nhập liệu', 'info')
+  }
+
+  function changePickedFiles(next: PickedFile[]) {
+    setPickedFiles(next)
+    update('attachments', next.map(({ attachment }) => attachment))
   }
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
-    const rawFiles = Array.from(event.target.files ?? [])
-    const newAttachments = rawFiles.map((file) => ({
-      name: file.name,
-      sizeKb: Math.max(1, Math.round(file.size / BYTES_PER_KB)),
-    }))
-    update('attachments', [...input.attachments, ...newAttachments])
+    const { accepted, oversizedNames } = selectAttachmentFiles(Array.from(event.target.files ?? []))
+    changePickedFiles([...pickedFiles, ...accepted])
+    if (oversizedNames.length > 0) notify(describeOversizedFiles(oversizedNames), 'error')
+    // Clearing the value lets the same file be picked again after it was removed or rejected
+    event.target.value = ''
   }
 
   function removeAttachment(index: number) {
-    update(
-      'attachments',
-      input.attachments.filter((_, idx) => idx !== index),
-    )
+    changePickedFiles(pickedFiles.filter((_, idx) => idx !== index))
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (viewer.role === 'admin' || viewer.isAdmin || viewer.isExecutive) {
-      notify('Quản trị viên chỉ có quyền giám sát, không được tạo yêu cầu', 'danger')
+      notify('Quản trị viên chỉ có quyền giám sát, không được tạo yêu cầu', 'error')
       return
     }
     const found = validateNewTicket(input, viewer, new Date())
     setErrors(found)
     if (Object.keys(found).length > 0) {
-      notify('Vui lòng kiểm tra và hoàn thiện các mục bắt buộc', 'danger')
+      notify('Vui lòng kiểm tra và hoàn thiện các mục bắt buộc', 'error')
       return
     }
     setIsSubmitting(true)
     try {
-      const ticket = await createTicket(input)
+      const attachments = await apiClient.attachments.uploadAll(pickedFiles.map(({ file }) => file))
+      const ticket = await createTicket({ ...input, attachments })
       notify(`Đã gửi yêu cầu ${ticket.code} thành công`, 'success')
       navigate(`/tickets/${ticket.id}`)
     } catch (err: unknown) {
-      notify(err instanceof Error && err.message ? err.message : 'Không thể tạo yêu cầu', 'danger')
+      notify(err instanceof Error && err.message ? err.message : 'Không thể tạo yêu cầu', 'error')
       setIsSubmitting(false)
     }
   }
@@ -277,30 +284,7 @@ export function NewTicketPage() {
             <FileInput id="attachments" selectedCount={input.attachments.length} onChange={handleFiles} />
           </FormField>
 
-          {input.attachments.length > 0 && (
-            <div className="flex flex-col gap-2 rounded-md border border-line bg-canvas p-3">
-              <span className="text-xs font-semibold text-ink">
-                Danh sách tệp đính kèm ({input.attachments.length}):
-              </span>
-              <ul className="divide-y divide-line">
-                {input.attachments.map((file, idx) => (
-                  <li key={`${file.name}-${idx}`} className="flex items-center justify-between py-1.5 text-xs">
-                    <span className="truncate pr-4 text-ink font-medium">
-                      {file.name}
-                      <span className="ml-2 text-[11px] text-ink-muted">({file.sizeKb} KB)</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => removeAttachment(idx)}
-                      className="shrink-0 text-brick-700 hover:underline font-semibold"
-                    >
-                      Xóa tệp
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <SelectedFileList files={pickedFiles} onRemove={removeAttachment} />
         </div>
         <div className="flex flex-wrap justify-end gap-2 border-t border-line px-4 py-3 md:px-6">
           <Button variant="secondary" onClick={() => navigate(-1)}>

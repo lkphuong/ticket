@@ -7,6 +7,11 @@ function isReceivingHead(ticket: Ticket, viewer: Viewer): boolean {
   return viewer.isDepartmentHead && viewer.department === ticket.toDepartment
 }
 
+// Second acceptance step belongs to the head of the department that raised the ticket
+function isRequestingHead(ticket: Ticket, viewer: Viewer): boolean {
+  return viewer.isDepartmentHead && viewer.department === ticket.fromDepartment
+}
+
 function isRequester(ticket: Ticket, viewer: Viewer): boolean {
   return ticket.requesterName === viewer.name
 }
@@ -29,6 +34,11 @@ export function canUpdateProgress(ticket: Ticket, viewer: Viewer): boolean {
 
 export function canConfirmResult(ticket: Ticket, viewer: Viewer): boolean {
   return withoutExecutive(viewer, () => isRequester(ticket, viewer) && ticket.status === 'resolved')
+}
+
+// Final acceptance: the requesting department head approves or rejects what the requester confirmed
+export function canApproveResult(ticket: Ticket, viewer: Viewer): boolean {
+  return withoutExecutive(viewer, () => isRequestingHead(ticket, viewer) && ticket.status === 'pending_approval')
 }
 
 // Covers both rework from "resolved" and reopening a closed ticket
@@ -63,6 +73,7 @@ export interface TicketPermissions {
   canAssign: boolean
   canUpdateProgress: boolean
   canConfirmResult: boolean
+  canApproveResult: boolean
   canReopen: boolean
   canCancel: boolean
   canEditPriority: boolean
@@ -75,6 +86,7 @@ export function getTicketPermissions(ticket: Ticket, viewer: Viewer): TicketPerm
     canAssign: canAssign(ticket, viewer),
     canUpdateProgress: canUpdateProgress(ticket, viewer),
     canConfirmResult: canConfirmResult(ticket, viewer),
+    canApproveResult: canApproveResult(ticket, viewer),
     canReopen: canReopen(ticket, viewer),
     canCancel: canCancel(ticket, viewer),
     canEditPriority: canEditPriority(ticket, viewer),

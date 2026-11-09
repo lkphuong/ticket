@@ -58,7 +58,7 @@ describe('ticketsReducer', () => {
     expect(ticket.status).toBe('waiting')
   })
 
-  it('should_close_ticket_and_store_rating_when_result_is_confirmed', () => {
+  it('should_move_to_pending_approval_and_store_rating_when_result_is_confirmed', () => {
     const [ticket] = ticketsReducer([makeTicket({ status: 'resolved' })], {
       type: 'result_confirmed',
       ticketId: 'TCK-1',
@@ -66,9 +66,43 @@ describe('ticketsReducer', () => {
       feedback: 'Rất hài lòng với kết quả',
       changedAt,
     })
-    expect(ticket.status).toBe('closed')
+    expect(ticket.status).toBe('pending_approval')
     expect(ticket.rating).toBe(4)
     expect(ticket.feedback).toBe('Rất hài lòng với kết quả')
+  })
+
+  it('should_close_ticket_when_pending_approval_is_approved', () => {
+    const [ticket] = ticketsReducer([makeTicket({ status: 'pending_approval', rating: 4 })], {
+      type: 'result_approved',
+      ticketId: 'TCK-1',
+      changedAt,
+    })
+    expect(ticket.status).toBe('closed')
+    expect(ticket.rating).toBe(4)
+  })
+
+  it('should_return_to_in_progress_and_clear_rating_when_approval_is_rejected', () => {
+    const [ticket] = ticketsReducer([makeTicket({ status: 'pending_approval', rating: 4, feedback: 'ok' })], {
+      type: 'approval_rejected',
+      ticketId: 'TCK-1',
+      reason: 'Chưa đủ chứng từ',
+      changedAt,
+    })
+    expect(ticket.status).toBe('in_progress')
+    expect(ticket.rating).toBeUndefined()
+    expect(ticket.feedback).toBeUndefined()
+    expect(ticket.statusHistory?.at(-1)?.reason).toBe('Chưa đủ chứng từ')
+  })
+
+  it('should_reject_approval_when_ticket_is_not_pending_approval', () => {
+    const original = makeTicket({ status: 'resolved' })
+    expect(ticketsReducer([original], { type: 'result_approved', ticketId: 'TCK-1', changedAt })).toEqual([original])
+  })
+
+  it('should_reject_approval_rejection_when_reason_is_blank', () => {
+    const original = makeTicket({ status: 'pending_approval' })
+    const action = { type: 'approval_rejected', ticketId: 'TCK-1', reason: '  ', changedAt } as const
+    expect(ticketsReducer([original], action)).toEqual([original])
   })
 
   it('should_only_touch_target_ticket_when_status_changes', () => {

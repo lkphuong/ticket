@@ -1,5 +1,7 @@
 import type { Ticket } from '@vtdesk/domain'
 import type { DbNotification, ITicketStore } from '../repositories/interfaces.ts'
+import { collectDirectoryKeys, resolveRecipients } from './notificationRecipients.ts'
+import type { MemberDirectory } from './notificationRecipients.ts'
 import type { IPushGateway } from './pushGateway.ts'
 
 export interface INotificationChannel {
@@ -48,6 +50,17 @@ export type TicketDomainEvent =
       rating: number
     }
   | {
+      type: 'result_approved'
+      ticket: Ticket
+      actorUsername: string
+    }
+  | {
+      type: 'approval_rejected'
+      ticket: Ticket
+      actorUsername: string
+      reason: string
+    }
+  | {
       type: 'ticket_rework'
       ticket: Ticket
       actorUsername: string
@@ -82,293 +95,38 @@ export class NotificationService {
     private readonly pushGateway?: IPushGateway,
   ) {}
 
-  // Dispatches domain events into targeted recipient in-app notifications
+  // Dispatches one domain event into targeted recipient in-app notifications
   async dispatch(event: TicketDomainEvent): Promise<void> {
+    await this.dispatchMany([event])
+  }
+
+  // Dispatches many events with a fixed number of database queries regardless of how many recipients they address
+  async dispatchMany(events: readonly TicketDomainEvent[]): Promise<void> {
+    if (events.length === 0) return
     try {
-      const allMembers = await this.store.members.findAll()
-      const findMemberByName = (name: string) => allMembers.find((m) => m.name === name)
-      const findReceivingHead = (department: string) =>
-        allMembers.find((m) => m.department === department && m.isDepartmentHead)
-
-      const targetRecipients: Array<{ username: string; title: string; body: string }> = []
-      const { ticket } = event
-
-      switch (event.type) {
-        case 'ticket_created': {
-          const head = findReceivingHead(ticket.toDepartment)
-          if (head && head.username !== event.actorUsername) {
-            targetRecipients.push({
-              username: head.username,
-              title: 'Ticket mới gửi đến phòng',
-              body: `[${ticket.code}] ${ticket.title} từ phòng ${ticket.fromDepartment}`,
-            })
-          }
-          break
-        }
-
-        case 'ticket_assigned': {
-          if (ticket.assigneeName) {
-            const assignee = findMemberByName(ticket.assigneeName)
-            if (assignee && assignee.username !== event.actorUsername) {
-              targetRecipients.push({
-                username: assignee.username,
-                title: 'Bạn được phân công xử lý Ticket',
-                body: `[${ticket.code}] ${ticket.title}`,
-              })
-            }
-          }
-          break
-        }
-
-        case 'status_waiting': {
-          const requester = findMemberByName(ticket.requesterName)
-          if (requester && requester.username !== event.actorUsername) {
-            targetRecipients.push({
-              username: requester.username,
-              title: 'Yêu cầu cần phản hồi thông tin',
-              body: `[${ticket.code}] ${ticket.title}${event.reason ? `: ${event.reason}` : ''}`,
-            })
-          }
-          break
-        }
-
-        case 'status_resolved': {
-          const requester = findMemberByName(ticket.requesterName)
-          if (requester && requester.username !== event.actorUsername) {
-            targetRecipients.push({
-              username: requester.username,
-              title: 'Yêu cầu đã xử lý hoàn tất',
-              body: `[${ticket.code}] ${ticket.title} đã hoàn thành, vui lòng nghiệm thu.`,
-            })
-          }
-          break
-        }
-
-        case 'comment_added': {
-          // If requester replies, notify assigned handler
-          const requester = findMemberByName(ticket.requesterName)
-          if (requester && requester.username === event.commentAuthorUsername) {
-            if (ticket.assigneeName) {
-              const assignee = findMemberByName(ticket.assigneeName)
-              if (assignee && assignee.username !== event.commentAuthorUsername) {
-                targetRecipients.push({
-                  username: assignee.username,
-                  title: 'Người gửi đã phản hồi Ticket',
-                  body: `[${ticket.code}] ${ticket.title}: ${event.body}`,
-                })
-              }
-            }
-          } else {
-            // Specialist or head commented, notify requester
-            if (requester && requester.username !== event.commentAuthorUsername) {
-              targetRecipients.push({
-                username: requester.username,
-                title: 'Có trao đổi mới trên Ticket',
-                body: `[${ticket.code}] ${ticket.title}: ${event.body}`,
-              })
-            }
-          }
-          break
-        }
-
-        case 'result_confirmed': {
-          // Notify both assignee and receiving department head
-          const head = findReceivingHead(ticket.toDepartment)
-          if (head && head.username !== event.actorUsername) {
-            targetRecipients.push({
-              username: head.username,
-              title: 'Yêu cầu đã được nghiệm thu',
-              body: `[${ticket.code}] ${ticket.title} - Đánh giá: ${event.rating}/5 sao`,
-            })
-          }
-
-          if (ticket.assigneeName) {
-            const assignee = findMemberByName(ticket.assigneeName)
-            if (assignee && assignee.username !== event.actorUsername && assignee.username !== head?.username) {
-              targetRecipients.push({
-                username: assignee.username,
-                title: 'Yêu cầu đã được nghiệm thu',
-                body: `[${ticket.code}] ${ticket.title} - Đánh giá: ${event.rating}/5 sao`,
-              })
-            }
-          }
-          break
-        }
-
-        case 'ticket_rework': {
-          const head = findReceivingHead(ticket.toDepartment)
-          if (head && head.username !== event.actorUsername) {
-            targetRecipients.push({
-              username: head.username,
-              title: 'Yêu cầu cần làm lại',
-              body: `[${ticket.code}] ${ticket.title} - Lý do: ${event.reason}`,
-            })
-          }
-
-          if (ticket.assigneeName) {
-            const assignee = findMemberByName(ticket.assigneeName)
-            if (assignee && assignee.username !== event.actorUsername && assignee.username !== head?.username) {
-              targetRecipients.push({
-                username: assignee.username,
-                title: 'Yêu cầu cần làm lại',
-                body: `[${ticket.code}] ${ticket.title} - Lý do: ${event.reason}`,
-              })
-            }
-          }
-          break
-        }
-
-        case 'ticket_reopened': {
-          const head = findReceivingHead(ticket.toDepartment)
-          if (head && head.username !== event.actorUsername) {
-            targetRecipients.push({
-              username: head.username,
-              title: 'Yêu cầu được mở lại',
-              body: `[${ticket.code}] ${ticket.title} - Lý do: ${event.reason}`,
-            })
-          }
-
-          if (ticket.assigneeName) {
-            const assignee = findMemberByName(ticket.assigneeName)
-            if (assignee && assignee.username !== event.actorUsername && assignee.username !== head?.username) {
-              targetRecipients.push({
-                username: assignee.username,
-                title: 'Yêu cầu được mở lại',
-                body: `[${ticket.code}] ${ticket.title} - Lý do: ${event.reason}`,
-              })
-            }
-          }
-          break
-        }
-
-        case 'ticket_cancelled': {
-          // If cancelled by requester, notify head and assignee
-          const head = findReceivingHead(ticket.toDepartment)
-          if (head && head.username !== event.actorUsername) {
-            targetRecipients.push({
-              username: head.username,
-              title: 'Yêu cầu đã bị hủy',
-              body: `[${ticket.code}] ${ticket.title} - Lý do: ${event.reason}`,
-            })
-          }
-
-          if (ticket.assigneeName) {
-            const assignee = findMemberByName(ticket.assigneeName)
-            if (assignee && assignee.username !== event.actorUsername && assignee.username !== head?.username) {
-              targetRecipients.push({
-                username: assignee.username,
-                title: 'Yêu cầu đã bị hủy',
-                body: `[${ticket.code}] ${ticket.title} - Lý do: ${event.reason}`,
-              })
-            }
-          }
-
-          // If cancelled by head, notify requester
-          const requester = findMemberByName(ticket.requesterName)
-          if (requester && requester.username !== event.actorUsername) {
-            targetRecipients.push({
-              username: requester.username,
-              title: 'Yêu cầu đã bị từ chối / hủy',
-              body: `[${ticket.code}] ${ticket.title} - Lý do: ${event.reason}`,
-            })
-          }
-          break
-        }
-
-        case 'deadline_impending': {
-          const head = findReceivingHead(ticket.toDepartment)
-          if (head) {
-            targetRecipients.push({
-              username: head.username,
-              title: 'Ticket sắp đến hạn',
-              body: `[${ticket.code}] ${ticket.title} còn 1 ngày đến hạn xử lý (${ticket.dueDate})`,
-            })
-          }
-
-          if (ticket.assigneeName) {
-            const assignee = findMemberByName(ticket.assigneeName)
-            if (assignee && assignee.username !== head?.username) {
-              targetRecipients.push({
-                username: assignee.username,
-                title: 'Ticket sắp đến hạn',
-                body: `[${ticket.code}] ${ticket.title} còn 1 ngày đến hạn xử lý (${ticket.dueDate})`,
-              })
-            }
-          }
-          break
-        }
-
-        case 'deadline_overdue': {
-          const head = findReceivingHead(ticket.toDepartment)
-          if (head) {
-            targetRecipients.push({
-              username: head.username,
-              title: 'Ticket đã quá hạn',
-              body: `[${ticket.code}] ${ticket.title} đã quá hạn xử lý (${ticket.dueDate})`,
-            })
-          }
-
-          if (ticket.assigneeName) {
-            const assignee = findMemberByName(ticket.assigneeName)
-            if (assignee && assignee.username !== head?.username) {
-              targetRecipients.push({
-                username: assignee.username,
-                title: 'Ticket đã quá hạn',
-                body: `[${ticket.code}] ${ticket.title} đã quá hạn xử lý (${ticket.dueDate})`,
-              })
-            }
-          }
-          break
-        }
-      }
-
+      const directory = await this.loadDirectory(events)
       const timestamp = this.clock().toISOString()
+      const notifications = events.flatMap((event) =>
+        resolveRecipients(event, directory).map(
+          (target): DbNotification => ({
+            id: crypto.randomUUID(),
+            recipientUsername: target.username,
+            ticketId: event.ticket.id,
+            type: event.type,
+            title: target.title,
+            body: target.body,
+            isRead: false,
+            createdAt: timestamp,
+          }),
+        ),
+      )
+      if (notifications.length === 0) return
 
-      // Save each notification and push through configured channels
-      for (const target of targetRecipients) {
-        const item: DbNotification = {
-          id: crypto.randomUUID(),
-          recipientUsername: target.username,
-          ticketId: ticket.id,
-          type: event.type,
-          title: target.title,
-          body: target.body,
-          isRead: false,
-          createdAt: timestamp,
-        }
+      await this.store.notifications.saveMany(notifications)
+      await this.pushToDevices(notifications)
 
-        await this.store.notifications.save(item)
-
-        // Dispatch push notification to all registered user devices
-        if (this.pushGateway) {
-          try {
-            const userDevices = await this.store.deviceTokens.findByUsername(target.username)
-            if (userDevices.length > 0) {
-              const tokens = userDevices.map((d) => d.token)
-              const pushResult = await this.pushGateway.sendToDevices(tokens, {
-                title: target.title,
-                body: target.body,
-                data: ticket.id ? { ticketId: ticket.id } : undefined,
-              })
-
-              // Automatically prune rejected device tokens reported by push provider
-              if (pushResult.invalidTokens && pushResult.invalidTokens.length > 0) {
-                for (const invalidToken of pushResult.invalidTokens) {
-                  await this.store.deviceTokens.deleteByToken(invalidToken)
-                }
-              }
-            }
-          } catch (pushErr: unknown) {
-            // Push delivery errors must only be logged contextually, preserving business flow
-            console.error('[NotificationService] Push delivery failed for recipient:', target.username, {
-              notificationType: event.type,
-              ticketId: ticket.id,
-              error: pushErr instanceof Error ? pushErr.message : String(pushErr),
-            })
-          }
-        }
-
-        // Push notification failure must not abort persistence
+      for (const item of notifications) {
+        // Channel failure must not abort persistence
         this.channel.send(item).catch((err) => {
           console.error(`[NotificationChannel] Failed to deliver push notification: ${err.message}`, {
             notificationId: item.id,
@@ -376,13 +134,61 @@ export class NotificationService {
           })
         })
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Isolate notifications failure to preserve business transactional integrity
-      console.error(`[NotificationService] Unexpected error while dispatching notification: ${err.message}`, {
-        eventType: event.type,
-        ticketId: event.ticket.id,
-      })
+      console.error(
+        `[NotificationService] Unexpected error while dispatching notification: ${err instanceof Error ? err.message : String(err)}`,
+        { eventTypes: [...new Set(events.map((event) => event.type))], eventCount: events.length },
+      )
     }
+  }
+
+  // Loads every member the events may address in two queries and exposes them for pure lookups
+  private async loadDirectory(events: readonly TicketDomainEvent[]): Promise<MemberDirectory> {
+    const { names, departments } = collectDirectoryKeys(events)
+    const [membersByName, heads] = await Promise.all([
+      this.store.members.findByNames(names),
+      this.store.members.findHeads(departments),
+    ])
+    return {
+      findByName: (name) => membersByName.find((member) => member.name === name),
+      findHead: (department) => heads.find((member) => member.department === department && member.isDepartmentHead),
+    }
+  }
+
+  // Sends push messages to the registered devices of every recipient using one token lookup
+  private async pushToDevices(notifications: readonly DbNotification[]): Promise<void> {
+    if (!this.pushGateway) return
+    const usernames = [...new Set(notifications.map((item) => item.recipientUsername))]
+    const devices = await this.store.deviceTokens.findByUsernames(usernames)
+    const tokensByUsername = new Map<string, string[]>()
+    for (const device of devices) {
+      tokensByUsername.set(device.username, [...(tokensByUsername.get(device.username) ?? []), device.token])
+    }
+
+    const invalidTokens: string[] = []
+    for (const item of notifications) {
+      const tokens = tokensByUsername.get(item.recipientUsername)
+      if (!tokens || tokens.length === 0) continue
+      try {
+        const pushResult = await this.pushGateway.sendToDevices(tokens, {
+          title: item.title,
+          body: item.body,
+          data: item.ticketId ? { ticketId: item.ticketId } : undefined,
+        })
+        invalidTokens.push(...(pushResult.invalidTokens ?? []))
+      } catch (pushErr: unknown) {
+        // Push delivery errors must only be logged contextually, preserving business flow
+        console.error('[NotificationService] Push delivery failed for recipient:', item.recipientUsername, {
+          notificationType: item.type,
+          ticketId: item.ticketId,
+          error: pushErr instanceof Error ? pushErr.message : String(pushErr),
+        })
+      }
+    }
+
+    // Prune rejected device tokens reported by the push provider in one delete
+    await this.store.deviceTokens.deleteByTokens(invalidTokens)
   }
 
   // Registers a device push token for an authenticated user

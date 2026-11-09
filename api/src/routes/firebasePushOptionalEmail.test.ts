@@ -195,17 +195,35 @@ describe('Firebase Push Notifications & Optional Email Profile API', () => {
       FIREBASE_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASC...\n-----END PRIVATE KEY-----',
     }
 
-    const gateway = new FirebasePushGateway(fakeEnv)
-    expect(gateway).toBeDefined()
+    const calls: Array<{ tokens: string[]; notification: { title: string; body: string } }> = []
+    const gateway = new FirebasePushGateway(fakeEnv, () => ({
+      sendEachForMulticast: async (message) => {
+        calls.push(message)
+        return {
+          responses: message.tokens.map((token) =>
+            token === 'stale-token'
+              ? { success: false, error: { code: 'messaging/registration-token-not-registered' } }
+              : { success: true },
+          ),
+        }
+      },
+    }))
 
-    // Verify gateway dispatches without errors when tokens are provided
-    const res = await gateway.sendToDevices(['mock-device-token'], {
+    const res = await gateway.sendToDevices(['mock-device-token', 'stale-token'], {
       title: 'Thông báo thử nghiệm',
       body: 'Nội dung kiểm tra',
     })
 
+    expect(calls[0]?.notification.title).toBe('Thông báo thử nghiệm')
     expect(res.successCount).toBe(1)
-    expect(res.invalidTokens).toHaveLength(0)
+    expect(res.failureCount).toBe(1)
+    expect(res.invalidTokens).toEqual(['stale-token'])
+  })
+
+  it('should_skip_delivery_when_firebase_credentials_are_missing', async () => {
+    const gateway = new FirebasePushGateway({})
+    const res = await gateway.sendToDevices(['token'], { title: 't', body: 'b' })
+    expect(res).toEqual({ successCount: 0, failureCount: 0, invalidTokens: [] })
   })
 
   it('should_validate_email_format_and_default_email_notifications_flag_to_false', async () => {

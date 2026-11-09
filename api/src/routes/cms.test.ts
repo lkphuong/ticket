@@ -43,7 +43,7 @@ describe('CMS Members & Departments', () => {
     const { app, adminToken } = await setupCms()
 
     const deptRes = await request(app)
-      .get('/api/cms/departments')
+      .get('/api/cms/departments/options')
       .set('Authorization', `Bearer ${adminToken}`)
 
     expect(deptRes.status).toBe(200)

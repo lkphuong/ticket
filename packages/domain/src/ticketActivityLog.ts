@@ -26,12 +26,18 @@ function describeStatusEntry(
   previousStatus: TicketStatus,
   entry: NonNullable<Ticket['statusHistory']>[number],
 ): Pick<ActivityEvent, 'kind' | 'summary' | 'detail'> {
+  if (entry.status === 'pending_approval') {
+    const rating = ticket.rating === undefined ? '' : ` (${ticket.rating}/5)`
+    return { kind: 'confirmed', summary: `Người gửi nghiệm thu${rating}, chờ Trưởng phòng duyệt` }
+  }
   if (entry.status === 'closed') {
     if (entry.reason) return { kind: 'cancelled', summary: 'Hủy yêu cầu', detail: entry.reason }
-    const rating = ticket.rating === undefined ? '' : ` (${ticket.rating}/5)`
-    return { kind: 'confirmed', summary: `Nghiệm thu và đóng yêu cầu${rating}` }
+    return { kind: 'confirmed', summary: 'Trưởng phòng duyệt nghiệm thu và đóng yêu cầu' }
   }
   if (entry.status === 'in_progress' && entry.reason) {
+    if (previousStatus === 'pending_approval') {
+      return { kind: 'rework', summary: 'Trưởng phòng từ chối duyệt nghiệm thu', detail: entry.reason }
+    }
     const isReopen = previousStatus === 'closed'
     return {
       kind: isReopen ? 'reopened' : 'rework',

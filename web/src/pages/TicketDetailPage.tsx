@@ -6,6 +6,7 @@ import { formatDate, formatDateTime } from "../lib/formatDate.ts";
 import { isWaitingOnViewer } from "../lib/ticketInbox.ts";
 import { calculateTicketSla } from "../lib/ticketSla.ts";
 import { useToast } from "../lib/toastContext.ts";
+import type { ToastTone } from "../lib/toastContext.ts";
 import { AttachmentList } from "../components/tickets/AttachmentList.tsx";
 import { CommentForm } from "../components/tickets/CommentForm.tsx";
 import { CommentThread } from "../components/tickets/CommentThread.tsx";
@@ -65,6 +66,8 @@ export function TicketDetailPage() {
     changeStatus,
     assignTicket,
     confirmResult,
+    approveResult,
+    rejectApproval,
     addComment,
     changePriority,
     changeDueDate,
@@ -84,19 +87,19 @@ export function TicketDetailPage() {
       navigator.clipboard
         .writeText(text)
         .then(() => {
-          notify(successMessage, "neutral");
+          notify(successMessage, "info");
         })
         .catch(() => {
-          notify("Không thể sao chép tự động", "danger");
+          notify("Không thể sao chép tự động", "error");
         });
     } else {
-      notify(successMessage, "neutral");
+      notify(successMessage, "info");
     }
   }
 
   // Shows the refusal reason when the lifecycle rules reject the action, otherwise the success message
-  function report(error: string | null, successMessage: string, tone: "neutral" | "success" | "danger" = "neutral") {
-    if (error) notify(error, "danger");
+  function report(error: string | null, successMessage: string, tone: ToastTone = "info") {
+    if (error) notify(error, "error");
     else notify(successMessage, tone);
   }
 
@@ -112,12 +115,22 @@ export function TicketDetailPage() {
 
   async function handleConfirm(rating: number, feedback?: string) {
     const err = await confirmResult(ticket!.id, rating, feedback);
-    report(err, "Đã hoàn tất nghiệm thu kết quả", "success");
+    report(err, "Đã nghiệm thu, chờ Trưởng phòng duyệt", "success");
+  }
+
+  async function handleApprove() {
+    const err = await approveResult(ticket!.id);
+    report(err, "Đã duyệt nghiệm thu và đóng yêu cầu", "success");
+  }
+
+  async function handleRejectApproval(reason: string) {
+    const err = await rejectApproval(ticket!.id, reason);
+    report(err, "Đã từ chối duyệt, yêu cầu quay lại xử lý", "info");
   }
 
   async function handleReopen(reason: string) {
     const err = await reopenTicket(ticket!.id, reason);
-    report(err, "Đã yêu cầu xử lý lại", "neutral");
+    report(err, "Đã yêu cầu xử lý lại", "info");
   }
 
   async function handleChangePriority(priority: TicketPriority) {
@@ -132,7 +145,7 @@ export function TicketDetailPage() {
 
   async function handleCancelTicket(reason: string) {
     const err = await cancelTicket(ticket!.id, reason);
-    report(err, "Đã hủy yêu cầu điều phối", "danger");
+    report(err, "Đã hủy yêu cầu điều phối", "info");
   }
 
   return (
@@ -299,6 +312,8 @@ export function TicketDetailPage() {
                 onAssign={handleAssign}
                 onChangeStatus={handleChangeStatus}
                 onConfirm={handleConfirm}
+                onApprove={handleApprove}
+                onRejectApproval={handleRejectApproval}
                 onReopen={handleReopen}
                 onChangePriority={handleChangePriority}
                 onChangeDueDate={handleChangeDueDate}

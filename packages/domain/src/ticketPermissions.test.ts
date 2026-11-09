@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { TICKET_STATUSES } from './ticket.ts'
 import type { Ticket, TicketStatus, Viewer } from './ticket.ts'
 import {
+  canApproveResult,
   canAssign,
   canCancel,
   canConfirmResult,
@@ -35,6 +36,7 @@ const requester: Viewer = { name: 'Bình', department: 'Marketing', isDepartment
 const assignee: Viewer = { name: 'Hà', department: 'Kế toán', isDepartmentHead: false }
 const otherStaff: Viewer = { name: 'Lan', department: 'Kế toán', isDepartmentHead: false }
 const receivingHead: Viewer = { name: 'Ngọc', department: 'Kế toán', isDepartmentHead: true }
+const requestingHead: Viewer = { name: 'Quân', department: 'Marketing', isDepartmentHead: true }
 const foreignHead: Viewer = { name: 'Khánh', department: 'Pháp chế', isDepartmentHead: true }
 const executive: Viewer = { name: 'Đăng', department: 'Hành chính', isDepartmentHead: false, isExecutive: true }
 const executiveRequester: Viewer = { ...executive, name: 'Bình' }
@@ -68,6 +70,18 @@ describe('ticket permissions', () => {
     for (const viewer of [assignee, receivingHead, otherStaff, executive, executiveRequester]) {
       expect(canConfirmResult(ticket, viewer)).toBe(false)
     }
+  })
+
+  it.each(TICKET_STATUSES)('should_allow_only_requesting_head_to_approve_when_status_is_%s', (status) => {
+    const ticket = makeTicket(status)
+    expect(canApproveResult(ticket, requestingHead)).toBe(status === 'pending_approval')
+    for (const viewer of [requester, assignee, receivingHead, otherStaff, foreignHead, executive]) {
+      expect(canApproveResult(ticket, viewer)).toBe(false)
+    }
+  })
+
+  it('should_not_let_requester_approve_own_result_when_requester_is_not_head', () => {
+    expect(canApproveResult(makeTicket('pending_approval'), requester)).toBe(false)
   })
 
   it.each(TICKET_STATUSES)('should_allow_only_requester_to_rework_or_reopen_when_status_is_%s', (status) => {

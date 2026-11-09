@@ -4,8 +4,6 @@ import {
   buildActivityLog,
   buildTicketTimeline,
   canViewTicket,
-  filterTickets,
-  filterVisibleTickets,
   generateTicketsCsv,
   getTicketPermissions,
 } from '@vtdesk/domain'
@@ -19,13 +17,17 @@ import type {
   Viewer,
 } from '@vtdesk/domain'
 import type { AuthenticatedRequest } from '../middleware/authMiddleware.ts'
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../cms/pagination.ts'
 import type { ITicketStore } from '../repositories/interfaces.ts'
+import { TicketLimitExceededError } from '../tickets/ticketLimits.ts'
 import {
   TicketAuthorizationError,
   TicketNotFoundError,
   TicketService,
   TicketValidationError,
 } from '../tickets/ticketService.ts'
+
+const HTTP_UNPROCESSABLE_ENTITY = 422
 
 // Maps authenticated session into domain Viewer context
 export function toDomainViewer(session: AuthenticatedRequest['viewer']): Viewer {
@@ -38,6 +40,39 @@ export function toDomainViewer(session: AuthenticatedRequest['viewer']): Viewer 
     isDepartmentHead: session.isDepartmentHead,
     // Administrator possesses full cross-department read visibility
     isExecutive: session.role === 'admin',
+  }
+}
+
+// Reads ticket list filters from a query string, defaulting every absent filter to its neutral value
+function parseTicketFilters(query: Record<string, unknown>): TicketFilters {
+  return {
+    scope: (query.scope as TicketScope) || 'all',
+    query: (query.query as string) || '',
+    status: (query.status as TicketStatus | 'all') || 'all',
+    priority: (query.priority as TicketPriority | 'all') || 'all',
+    department: (query.department as Department | 'all') || 'all',
+    fromDepartment: (query.fromDepartment as Department | 'all') || 'all',
+    createdFrom: (query.createdFrom as string) || '',
+    createdTo: (query.createdTo as string) || '',
+    due: (query.due as TicketFilters['due']) || 'all',
+    assignment: (query.assignment as TicketFilters['assignment']) || 'all',
+    assigneeName: (query.assigneeName as string) || '',
+    sort: (query.sort as TicketSort) || 'updated_desc',
+  }
+}
+
+// Maps ticket service failures onto their HTTP status and response shape
+function respondTicketError(res: Response, err: unknown, fallbackMessage: string): void {
+  if (err instanceof TicketNotFoundError) {
+    res.status(404).json({ error: 'NotFound', message: err.message })
+  } else if (err instanceof TicketAuthorizationError) {
+    res.status(403).json({ error: 'Forbidden', message: err.message })
+  } else if (err instanceof TicketValidationError) {
+    res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
+  } else if (err instanceof TicketLimitExceededError) {
+    res.status(HTTP_UNPROCESSABLE_ENTITY).json({ error: 'TicketLimitExceeded', message: err.message })
+  } else {
+    res.status(500).json({ error: 'InternalError', message: (err instanceof Error && err.message) || fallbackMessage })
   }
 }
 
@@ -61,71 +96,29 @@ export function createTicketRouter(
 
       const ticket = await ticketService.createTicket(req.body, member)
       res.status(201).json({ ticket })
-    } catch (err: any) {
-      if (err instanceof TicketAuthorizationError) {
-        res.status(403).json({
-          error: 'Forbidden',
-          message: err.message,
-        })
-        return
-      }
-      if (err instanceof TicketValidationError) {
-        res.status(400).json({
-          error: 'ValidationError',
-          message: err.message,
-          errors: err.errors,
-        })
-        return
-      }
-      res.status(500).json({
-        error: 'InternalError',
-        message: err.message || 'Unable to create ticket.',
-      })
+    } catch (err: unknown) {
+      respondTicketError(res, err, 'Unable to create ticket.')
     }
   })
 
-  // Retrieves filtered, search-indexed, paginated ticket collection
+  // Retrieves one filtered, sorted and paginated page of the tickets the viewer may see
   router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const viewer = toDomainViewer(req.viewer)
-      const allTickets = await store.tickets.findAll()
-
-      // 1. Enforce strict authorization visibility boundaries
-      const visibleTickets = filterVisibleTickets(allTickets, viewer)
-
-      // 2. Parse query parameters into domain TicketFilters
-      const filters: TicketFilters = {
-        scope: (req.query.scope as TicketScope) || 'all',
-        query: (req.query.query as string) || '',
-        status: (req.query.status as TicketStatus | 'all') || 'all',
-        priority: (req.query.priority as TicketPriority | 'all') || 'all',
-        department: (req.query.department as Department | 'all') || 'all',
-        fromDepartment: (req.query.fromDepartment as Department | 'all') || 'all',
-        createdFrom: (req.query.createdFrom as string) || '',
-        createdTo: (req.query.createdTo as string) || '',
-        due: (req.query.due as any) || 'all',
-        assignment: (req.query.assignment as any) || 'all',
-        assigneeName: (req.query.assigneeName as string) || '',
-        sort: (req.query.sort as TicketSort) || 'updated_desc',
-      }
-
-      // 3. Apply pure domain filtering and ordering
-      const filteredTickets = filterTickets(visibleTickets, filters, viewer)
-
-      // 4. Calculate stable pagination slices
       const page = Math.max(1, parseInt((req.query.page as string) || '1', 10))
-      const limit = Math.max(1, Math.min(100, parseInt((req.query.limit as string) || '20', 10)))
-      const total = filteredTickets.length
-      const totalPages = Math.ceil(total / limit) || 1
-      const offset = (page - 1) * limit
-      const paginated = filteredTickets.slice(offset, offset + limit)
+      const limit = Math.max(1, Math.min(MAX_PAGE_SIZE, parseInt((req.query.limit as string) || String(DEFAULT_PAGE_SIZE), 10)))
+
+      const { items, total } = await store.tickets.findPage(
+        { viewer, filters: parseTicketFilters(req.query), now: new Date() },
+        { page, limit },
+      )
 
       res.status(200).json({
-        tickets: paginated,
+        tickets: items,
         total,
         page,
         limit,
-        totalPages,
+        totalPages: Math.ceil(total / limit) || 1,
       })
     } catch (err: any) {
       res.status(500).json({
@@ -139,36 +132,11 @@ export function createTicketRouter(
   router.get('/export', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const viewer = toDomainViewer(req.viewer)
-      const allTickets = await store.tickets.findAll()
-
-      // 1. Enforce strict authorization visibility boundaries
-      const visibleTickets = filterVisibleTickets(allTickets, viewer)
-
-      // 2. Parse query parameters into domain TicketFilters matching the list API
-      const filters: TicketFilters = {
-        scope: (req.query.scope as TicketScope) || 'all',
-        query: (req.query.query as string) || '',
-        status: (req.query.status as TicketStatus | 'all') || 'all',
-        priority: (req.query.priority as TicketPriority | 'all') || 'all',
-        department: (req.query.department as Department | 'all') || 'all',
-        fromDepartment: (req.query.fromDepartment as Department | 'all') || 'all',
-        createdFrom: (req.query.createdFrom as string) || '',
-        createdTo: (req.query.createdTo as string) || '',
-        due: (req.query.due as any) || 'all',
-        assignment: (req.query.assignment as any) || 'all',
-        assigneeName: (req.query.assigneeName as string) || '',
-        sort: (req.query.sort as TicketSort) || 'updated_desc',
-      }
-
-      // 3. Apply pure domain filtering and ordering
-      const filteredTickets = filterTickets(visibleTickets, filters, viewer)
-
-      // 4. Generate CSV payload with UTF-8 BOM
-      const csvPayload = generateTicketsCsv(filteredTickets)
+      const tickets = await store.tickets.findMatching({ viewer, filters: parseTicketFilters(req.query), now: new Date() })
 
       res.setHeader('Content-Type', 'text/csv; charset=utf-8')
       res.setHeader('Content-Disposition', 'attachment; filename="tickets.csv"')
-      res.status(200).send(csvPayload)
+      res.status(200).send(generateTicketsCsv(tickets))
     } catch (err: any) {
       res.status(500).json({
         error: 'InternalError',
@@ -233,20 +201,8 @@ export function createTicketRouter(
 
       const ticket = await ticketService.assignTicket(req.params.id, assigneeName, member)
       res.status(200).json({ ticket })
-    } catch (err: any) {
-      if (err instanceof TicketNotFoundError) {
-        res.status(404).json({ error: 'NotFound', message: err.message })
-        return
-      }
-      if (err instanceof TicketAuthorizationError) {
-        res.status(403).json({ error: 'Forbidden', message: err.message })
-        return
-      }
-      if (err instanceof TicketValidationError) {
-        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
-        return
-      }
-      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to assign ticket.' })
+    } catch (err: unknown) {
+      respondTicketError(res, err, 'Unable to assign ticket.')
     }
   })
 
@@ -262,20 +218,8 @@ export function createTicketRouter(
       const { priority } = req.body
       const ticket = await ticketService.updatePriority(req.params.id, priority, member)
       res.status(200).json({ ticket })
-    } catch (err: any) {
-      if (err instanceof TicketNotFoundError) {
-        res.status(404).json({ error: 'NotFound', message: err.message })
-        return
-      }
-      if (err instanceof TicketAuthorizationError) {
-        res.status(403).json({ error: 'Forbidden', message: err.message })
-        return
-      }
-      if (err instanceof TicketValidationError) {
-        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
-        return
-      }
-      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to update priority.' })
+    } catch (err: unknown) {
+      respondTicketError(res, err, 'Unable to update priority.')
     }
   })
 
@@ -291,20 +235,8 @@ export function createTicketRouter(
       const { dueDate } = req.body
       const ticket = await ticketService.updateDueDate(req.params.id, dueDate, member)
       res.status(200).json({ ticket })
-    } catch (err: any) {
-      if (err instanceof TicketNotFoundError) {
-        res.status(404).json({ error: 'NotFound', message: err.message })
-        return
-      }
-      if (err instanceof TicketAuthorizationError) {
-        res.status(403).json({ error: 'Forbidden', message: err.message })
-        return
-      }
-      if (err instanceof TicketValidationError) {
-        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
-        return
-      }
-      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to update due date.' })
+    } catch (err: unknown) {
+      respondTicketError(res, err, 'Unable to update due date.')
     }
   })
 
@@ -325,20 +257,8 @@ export function createTicketRouter(
 
       const ticket = await ticketService.updateProgress(req.params.id, status, member, reason)
       res.status(200).json({ ticket })
-    } catch (err: any) {
-      if (err instanceof TicketNotFoundError) {
-        res.status(404).json({ error: 'NotFound', message: err.message })
-        return
-      }
-      if (err instanceof TicketAuthorizationError) {
-        res.status(403).json({ error: 'Forbidden', message: err.message })
-        return
-      }
-      if (err instanceof TicketValidationError) {
-        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
-        return
-      }
-      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to update status.' })
+    } catch (err: unknown) {
+      respondTicketError(res, err, 'Unable to update status.')
     }
   })
 
@@ -354,24 +274,45 @@ export function createTicketRouter(
       const { body, attachments } = req.body
       const result = await ticketService.addComment(req.params.id, body, member, attachments)
       res.status(201).json(result)
-    } catch (err: any) {
-      if (err instanceof TicketNotFoundError) {
-        res.status(404).json({ error: 'NotFound', message: err.message })
-        return
-      }
-      if (err instanceof TicketAuthorizationError) {
-        res.status(403).json({ error: 'Forbidden', message: err.message })
-        return
-      }
-      if (err instanceof TicketValidationError) {
-        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
-        return
-      }
-      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to post comment.' })
+    } catch (err: unknown) {
+      respondTicketError(res, err, 'Unable to post comment.')
     }
   })
 
-  // Confirms ticket resolution, sets CSAT rating and feedback (Requester only)
+  // Approves a confirmed result and closes the ticket (head of the requesting department only)
+  router.post('/:id/approve', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const member = req.viewer
+      if (!member) {
+        res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' })
+        return
+      }
+
+      const ticket = await ticketService.approveTicket(req.params.id, member)
+      res.status(200).json({ ticket })
+    } catch (err: unknown) {
+      respondTicketError(res, err, 'Unable to approve ticket.')
+    }
+  })
+
+  // Rejects a confirmed result and sends the ticket back to work (head of the requesting department only)
+  router.post('/:id/reject-approval', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const member = req.viewer
+      if (!member) {
+        res.status(401).json({ error: 'Unauthorized', message: 'Authentication required.' })
+        return
+      }
+
+      const { reason } = req.body
+      const ticket = await ticketService.rejectApproval(req.params.id, reason, member)
+      res.status(200).json({ ticket })
+    } catch (err: unknown) {
+      respondTicketError(res, err, 'Unable to reject approval.')
+    }
+  })
+
+  // First acceptance step: confirms ticket resolution with CSAT rating and feedback (Requester only)
   router.post('/:id/confirm', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const member = req.viewer
@@ -383,20 +324,8 @@ export function createTicketRouter(
       const { rating, feedback } = req.body
       const ticket = await ticketService.confirmTicket(req.params.id, rating, feedback, member)
       res.status(200).json({ ticket })
-    } catch (err: any) {
-      if (err instanceof TicketNotFoundError) {
-        res.status(404).json({ error: 'NotFound', message: err.message })
-        return
-      }
-      if (err instanceof TicketAuthorizationError) {
-        res.status(403).json({ error: 'Forbidden', message: err.message })
-        return
-      }
-      if (err instanceof TicketValidationError) {
-        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
-        return
-      }
-      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to confirm ticket.' })
+    } catch (err: unknown) {
+      respondTicketError(res, err, 'Unable to confirm ticket.')
     }
   })
 
@@ -412,20 +341,8 @@ export function createTicketRouter(
       const { reason } = req.body
       const ticket = await ticketService.reworkTicket(req.params.id, reason, member)
       res.status(200).json({ ticket })
-    } catch (err: any) {
-      if (err instanceof TicketNotFoundError) {
-        res.status(404).json({ error: 'NotFound', message: err.message })
-        return
-      }
-      if (err instanceof TicketAuthorizationError) {
-        res.status(403).json({ error: 'Forbidden', message: err.message })
-        return
-      }
-      if (err instanceof TicketValidationError) {
-        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
-        return
-      }
-      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to request rework.' })
+    } catch (err: unknown) {
+      respondTicketError(res, err, 'Unable to request rework.')
     }
   })
 
@@ -441,20 +358,8 @@ export function createTicketRouter(
       const { reason } = req.body
       const ticket = await ticketService.reopenTicket(req.params.id, reason, member)
       res.status(200).json({ ticket })
-    } catch (err: any) {
-      if (err instanceof TicketNotFoundError) {
-        res.status(404).json({ error: 'NotFound', message: err.message })
-        return
-      }
-      if (err instanceof TicketAuthorizationError) {
-        res.status(403).json({ error: 'Forbidden', message: err.message })
-        return
-      }
-      if (err instanceof TicketValidationError) {
-        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
-        return
-      }
-      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to reopen ticket.' })
+    } catch (err: unknown) {
+      respondTicketError(res, err, 'Unable to reopen ticket.')
     }
   })
 
@@ -470,20 +375,8 @@ export function createTicketRouter(
       const { reason } = req.body
       const ticket = await ticketService.cancelTicket(req.params.id, reason, member)
       res.status(200).json({ ticket })
-    } catch (err: any) {
-      if (err instanceof TicketNotFoundError) {
-        res.status(404).json({ error: 'NotFound', message: err.message })
-        return
-      }
-      if (err instanceof TicketAuthorizationError) {
-        res.status(403).json({ error: 'Forbidden', message: err.message })
-        return
-      }
-      if (err instanceof TicketValidationError) {
-        res.status(400).json({ error: 'ValidationError', message: err.message, errors: err.errors })
-        return
-      }
-      res.status(500).json({ error: 'InternalError', message: err.message || 'Unable to cancel ticket.' })
+    } catch (err: unknown) {
+      respondTicketError(res, err, 'Unable to cancel ticket.')
     }
   })
 

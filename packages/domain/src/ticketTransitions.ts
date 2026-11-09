@@ -6,7 +6,8 @@ export const STATUS_TRANSITIONS: Record<TicketStatus, readonly TicketStatus[]> =
   open: ['in_progress', 'closed'],
   in_progress: ['waiting', 'resolved', 'closed'],
   waiting: ['in_progress', 'resolved', 'closed'],
-  resolved: ['in_progress', 'closed'],
+  resolved: ['in_progress', 'pending_approval', 'closed'],
+  pending_approval: ['in_progress', 'closed'],
   closed: ['in_progress'],
 }
 

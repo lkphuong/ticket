@@ -355,6 +355,30 @@ export function buildMockTickets(now: Date): Ticket[] {
     ],
     assignmentHistory: [{ to: 'Lê Thu Hà', at: isoDaysFromNow(-1) }],
   },
+  {
+    id: 'TCK-1018',
+    title: 'Cấp lại thẻ từ ra vào cho nhân sự mới',
+    description: 'Thẻ từ đã cấp đủ, người gửi đã nghiệm thu và chờ Trưởng phòng Vận hành duyệt.',
+    priority: 'low',
+    status: 'pending_approval',
+    requesterName: 'Vũ Thanh Tùng',
+    fromDepartment: 'Vận hành',
+    toDepartment: 'Hành chính',
+    assigneeName: 'Lâm Mỹ Duyên',
+    dueDate: dateOnlyDaysFromNow(2),
+    createdAt: isoDaysFromNow(-6),
+    updatedAt: isoDaysFromNow(-1),
+    rating: 5,
+    attachments: [],
+    comments: [],
+    statusHistory: [
+      { status: 'open', at: isoDaysFromNow(-6) },
+      { status: 'in_progress', at: isoDaysFromNow(-5) },
+      { status: 'resolved', at: isoDaysFromNow(-2) },
+      { status: 'pending_approval', at: isoDaysFromNow(-1) },
+    ],
+    assignmentHistory: [{ to: 'Lâm Mỹ Duyên', at: isoDaysFromNow(-5) }],
+  },
   ]
 
   return assignCodesAndUuids(drafts)

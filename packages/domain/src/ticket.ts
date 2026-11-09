@@ -1,4 +1,4 @@
-export const TICKET_STATUSES = ['open', 'in_progress', 'waiting', 'resolved', 'closed'] as const
+export const TICKET_STATUSES = ['open', 'in_progress', 'waiting', 'resolved', 'pending_approval', 'closed'] as const
 export type TicketStatus = (typeof TICKET_STATUSES)[number]
 
 export const TICKET_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const
@@ -21,6 +21,7 @@ export const STATUS_LABELS: Record<TicketStatus, string> = {
   in_progress: 'Đang xử lý',
   waiting: 'Chờ phản hồi',
   resolved: 'Đã xử lý',
+  pending_approval: 'Chờ duyệt',
   closed: 'Đã đóng',
 }
 
@@ -68,6 +69,9 @@ export interface TicketAssignmentChange {
 export interface TicketAttachment {
   name: string
   sizeKb: number
+  // Reference to the uploaded content; absent for attachments recorded before file storage existed
+  id?: string
+  mimeType?: string
 }
 
 export interface Ticket {

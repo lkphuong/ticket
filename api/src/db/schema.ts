@@ -1,162 +1,235 @@
-import { boolean, integer, pgTable, primaryKey, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core'
+// Canonical MongoDB collection names
+export const COLLECTION_NAMES = {
+  DEPARTMENTS: 'departments',
+  MEMBERS: 'members',
+  TICKETS: 'tickets',
+  TICKET_CODE_COUNTERS: 'ticket_code_counters',
+  REQUEST_TEMPLATES: 'request_templates',
+  DEFAULT_SLAS: 'default_slas',
+  NOTIFICATIONS: 'notifications',
+  AUDIT_LOGS: 'audit_logs',
+  DEVICE_TOKENS: 'device_tokens',
+} as const
 
-// Department registry holding canonical organization divisions
-export const departments = pgTable('departments', {
-  name: text('name').primaryKey(),
-  // Uppercase prefix printed inside ticket codes, e.g. CNTT in TCK-CNTT-2611-001
-  codePrefix: varchar('code_prefix', { length: 12 }).notNull().unique(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export type CollectionName = (typeof COLLECTION_NAMES)[keyof typeof COLLECTION_NAMES]
 
-// System accounts with authentication and authorization roles
-export const members = pgTable('members', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  username: varchar('username', { length: 64 }).notNull().unique(),
-  name: text('name').notNull(),
-  department: text('department').notNull().references(() => departments.name, { onDelete: 'restrict' }),
-  role: varchar('role', { length: 20 }).notNull(), // 'staff' | 'head' | 'admin'
-  isDepartmentHead: boolean('is_department_head').notNull().default(false),
-  isActive: boolean('is_active').notNull().default(true),
-  passwordHash: text('password_hash').notNull(),
-  requiresPasswordChange: boolean('requires_password_change').notNull().default(false),
-  email: varchar('email', { length: 255 }),
-  receiveEmailNotifications: boolean('receive_email_notifications').notNull().default(false),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-})
+// Department document storing organizational divisions and ticket prefix codes
+export interface DepartmentDocument {
+  _id: string
+  name: string
+  codePrefix: string
+  createdAt: Date
+}
 
-// Central Ticket entities representing work requests
-export const tickets = pgTable('tickets', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  // Human readable code such as TCK-CNTT-2611-001
-  code: varchar('code', { length: 40 }).notNull().unique(),
-  title: text('title').notNull(),
-  description: text('description').notNull(),
-  purpose: text('purpose'),
-  expectedResult: text('expected_result'),
-  priority: varchar('priority', { length: 20 }).notNull(), // 'low' | 'medium' | 'high' | 'urgent'
-  status: varchar('status', { length: 20 }).notNull(), // 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed'
-  requesterName: text('requester_name').notNull(),
-  fromDepartment: text('from_department').notNull().references(() => departments.name, { onDelete: 'restrict' }),
-  toDepartment: text('to_department').notNull().references(() => departments.name, { onDelete: 'restrict' }),
-  assigneeName: text('assignee_name'),
-  dueDate: varchar('due_date', { length: 10 }), // YYYY-MM-DD
-  rating: integer('rating'),
-  feedback: text('feedback'),
-  cancelReason: text('cancel_reason'),
-  createdAt: varchar('created_at', { length: 64 }).notNull(),
-  updatedAt: varchar('updated_at', { length: 64 }).notNull(),
-})
+// Hashed email verification code with expiry, wrong attempt counter and last send time
+export interface MemberOtpDocument {
+  hash: string
+  expiresAt: Date
+  attempts: number
+  sentAt: Date
+}
 
-// Last allocated ticket sequence per receiving department and month (YYMM)
-export const ticketCodeCounters = pgTable(
-  'ticket_code_counters',
-  {
-    codePrefix: varchar('code_prefix', { length: 12 }).notNull(),
-    period: varchar('period', { length: 4 }).notNull(),
-    lastSequence: integer('last_sequence').notNull(),
+// User account document maintaining credentials, role boundaries, and profile state
+export interface MemberDocument {
+  _id: string
+  username: string
+  name: string
+  department: string
+  role: 'staff' | 'head' | 'admin'
+  isDepartmentHead: boolean
+  isActive: boolean
+  passwordHash: string
+  requiresPasswordChange: boolean
+  email?: string | null
+  receiveEmailNotifications: boolean
+  isVerified?: boolean
+  otp?: MemberOtpDocument | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+// Embedded attachment metadata stored directly inside ticket and comment subdocuments
+export interface TicketEmbeddedAttachment {
+  readonly name: string
+  readonly sizeKb: number
+  readonly id?: string
+  readonly mimeType?: string
+}
+
+// Embedded comment record maintaining discussion timeline without requiring join queries
+export interface TicketEmbeddedComment {
+  readonly id: string
+  readonly author: string
+  readonly department: string
+  readonly body: string
+  readonly createdAt: string
+  readonly attachments?: readonly TicketEmbeddedAttachment[]
+}
+
+// Embedded lifecycle status transition record preserving auditability within document boundary
+export interface TicketEmbeddedStatusChange {
+  readonly status: string
+  readonly at: string
+  readonly reason?: string
+  readonly actor?: {
+    readonly name: string
+    readonly department: string
+  }
+}
+
+// Embedded assignment handoff record tracking specialist dispatch history
+export interface TicketEmbeddedAssignmentChange {
+  readonly from?: string
+  readonly to: string
+  readonly at: string
+  readonly actor?: {
+    readonly name: string
+    readonly department: string
+  }
+}
+
+// Central Ticket document aggregate embedding all child entities for single-read performance and atomic updates
+export interface TicketDocument {
+  _id: string
+  code: string
+  title: string
+  description: string
+  purpose?: string | null
+  expectedResult?: string | null
+  priority: string
+  status: string
+  requesterName: string
+  fromDepartment: string
+  toDepartment: string
+  assigneeName?: string | null
+  dueDate?: string | null
+  rating?: number | null
+  feedback?: string | null
+  cancelReason?: string | null
+  createdAt: string
+  updatedAt: string
+  attachments: readonly TicketEmbeddedAttachment[]
+  comments: readonly TicketEmbeddedComment[]
+  statusHistory: readonly TicketEmbeddedStatusChange[]
+  assignmentHistory: readonly TicketEmbeddedAssignmentChange[]
+}
+
+// Atomic counter tracking the next sequence number per department prefix and month period
+export interface TicketCodeCounterDocument {
+  _id: string
+  codePrefix: string
+  period: string
+  lastSequence: number
+  updatedAt?: Date
+}
+
+// Request template document holding standardized input blueprints for departments
+export interface RequestTemplateDocument {
+  _id: string
+  targetDepartment: string
+  title: string
+  description: string
+  purpose: string
+  expectedResult: string
+  defaultPriority: string
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
+// SLA configuration document mapping response and resolution hours per priority tier
+export interface DefaultSlaDocument {
+  _id: string
+  priority: string
+  responseHours: number
+  resolutionHours: number
+  createdAt: Date
+  updatedAt: Date
+}
+
+// Personal workflow notification document delivered to individual accounts
+export interface NotificationDocument {
+  _id: string
+  recipientUsername: string
+  ticketId?: string | null
+  type: string
+  title: string
+  body: string
+  isRead: boolean
+  createdAt: string
+}
+
+// Immutable audit log document recording administrative modifications
+export interface AuditLogDocument {
+  _id: string
+  actorUsername: string
+  action: string
+  entityType: string
+  entityId: string
+  details: string
+  createdAt: Date
+}
+
+// Push notification registration document mapping device push tokens to user accounts
+export interface DeviceTokenDocument {
+  _id: string
+  username: string
+  token: string
+  createdAt: Date
+}
+
+// Collection JSON schema validators enforcing data invariants at the MongoDB engine layer
+export const COLLECTION_VALIDATORS: Record<string, Record<string, unknown>> = {
+  [COLLECTION_NAMES.DEPARTMENTS]: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['name', 'codePrefix', 'createdAt'],
+      properties: {
+        _id: { bsonType: ['string', 'objectId'] },
+        name: { bsonType: 'string', minLength: 1 },
+        codePrefix: { bsonType: 'string', minLength: 1, maxLength: 12 },
+        createdAt: { bsonType: 'date' },
+      },
+    },
   },
-  (table) => [primaryKey({ columns: [table.codePrefix, table.period] })],
-)
-
-// File attachment metadata associated with tickets
-export const ticketAttachments = pgTable('ticket_attachments', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  ticketId: uuid('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
-  sizeKb: integer('size_kb').notNull(),
-})
-
-// Discussion and clarification comments on tickets
-export const ticketComments = pgTable('ticket_comments', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  ticketId: uuid('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
-  author: text('author').notNull(),
-  department: text('department').notNull(),
-  body: text('body').notNull(),
-  createdAt: varchar('created_at', { length: 64 }).notNull(),
-})
-
-// File attachments uploaded inside comment threads
-export const commentAttachments = pgTable('comment_attachments', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  commentId: uuid('comment_id').notNull().references(() => ticketComments.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
-  sizeKb: integer('size_kb').notNull(),
-})
-
-// Historical log of ticket lifecycle transitions
-export const ticketStatusHistory = pgTable('ticket_status_history', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  ticketId: uuid('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
-  status: varchar('status', { length: 20 }).notNull(),
-  at: varchar('at', { length: 64 }).notNull(),
-  reason: text('reason'),
-  actorName: text('actor_name'),
-  actorDepartment: text('actor_department'),
-})
-
-// Historical log of specialist assignment changes
-export const ticketAssignmentHistory = pgTable('ticket_assignment_history', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  ticketId: uuid('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
-  fromAssignee: text('from_assignee'),
-  toAssignee: text('to_assignee').notNull(),
-  at: varchar('at', { length: 64 }).notNull(),
-  actorName: text('actor_name'),
-  actorDepartment: text('actor_department'),
-})
-
-// Request templates configured by administrators
-export const requestTemplates = pgTable('request_templates', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  targetDepartment: text('target_department').notNull().references(() => departments.name, { onDelete: 'restrict' }),
-  title: text('title').notNull(),
-  description: text('description').notNull(),
-  purpose: text('purpose').notNull(),
-  expectedResult: text('expected_result').notNull(),
-  defaultPriority: varchar('default_priority', { length: 20 }).notNull(),
-  isActive: boolean('is_active').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-})
-
-// Default Service Level Agreement hours per priority
-export const defaultSlas = pgTable('default_slas', {
-  priority: varchar('priority', { length: 20 }).primaryKey(),
-  responseHours: integer('response_hours').notNull(),
-  resolutionHours: integer('resolution_hours').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-})
-
-// System notifications emitted on business workflow events
-export const notifications = pgTable('notifications', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  recipientUsername: varchar('recipient_username', { length: 64 }).notNull(),
-  ticketId: uuid('ticket_id'),
-  type: varchar('type', { length: 64 }).notNull(),
-  title: text('title').notNull(),
-  body: text('body').notNull(),
-  isRead: boolean('is_read').notNull().default(false),
-  createdAt: varchar('created_at', { length: 64 }).notNull(),
-})
-
-// Immutable audit log recording administrative configuration changes
-export const auditLogs = pgTable('audit_logs', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  actorUsername: varchar('actor_username', { length: 64 }).notNull(),
-  action: varchar('action', { length: 64 }).notNull(),
-  entityType: varchar('entity_type', { length: 64 }).notNull(),
-  entityId: varchar('entity_id', { length: 64 }).notNull(),
-  details: text('details').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
-
-// Registered device tokens for mobile and web push notifications via Firebase Cloud Messaging
-export const deviceTokens = pgTable('device_tokens', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  username: varchar('username', { length: 64 }).notNull(),
-  token: text('token').notNull().unique(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+  [COLLECTION_NAMES.MEMBERS]: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['username', 'name', 'department', 'role', 'passwordHash'],
+      properties: {
+        _id: { bsonType: ['string', 'objectId'] },
+        username: { bsonType: 'string', minLength: 1 },
+        name: { bsonType: 'string', minLength: 1 },
+        department: { bsonType: 'string', minLength: 1 },
+        role: { enum: ['staff', 'head', 'admin'] },
+        isDepartmentHead: { bsonType: 'bool' },
+        isActive: { bsonType: 'bool' },
+        passwordHash: { bsonType: 'string' },
+        requiresPasswordChange: { bsonType: 'bool' },
+        email: { bsonType: ['string', 'null'] },
+        receiveEmailNotifications: { bsonType: 'bool' },
+      },
+    },
+  },
+  [COLLECTION_NAMES.TICKETS]: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['code', 'title', 'description', 'priority', 'status', 'requesterName', 'fromDepartment', 'toDepartment', 'createdAt', 'updatedAt'],
+      properties: {
+        _id: { bsonType: ['string', 'objectId'] },
+        code: { bsonType: 'string' },
+        title: { bsonType: 'string' },
+        description: { bsonType: 'string' },
+        priority: { enum: ['low', 'medium', 'high', 'urgent'] },
+        status: { enum: ['open', 'in_progress', 'waiting', 'resolved', 'pending_approval', 'closed'] },
+        requesterName: { bsonType: 'string' },
+        fromDepartment: { bsonType: 'string' },
+        toDepartment: { bsonType: 'string' },
+        attachments: { bsonType: 'array' },
+        comments: { bsonType: 'array' },
+        statusHistory: { bsonType: 'array' },
+        assignmentHistory: { bsonType: 'array' },
+      },
+    },
+  },
+}

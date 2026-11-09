@@ -27,6 +27,7 @@ const STAGES: readonly TimelineStage[] = [
   { label: 'Đã tiếp nhận', status: 'in_progress', currentWhen: [], recordedAt: 'first' },
   { label: 'Đang xử lý', status: 'in_progress', currentWhen: ['in_progress', 'waiting'], recordedAt: 'last' },
   { label: 'Hoàn thành', status: 'resolved', currentWhen: ['resolved'], recordedAt: 'last' },
+  { label: 'Chờ duyệt', status: 'pending_approval', currentWhen: ['pending_approval'], recordedAt: 'last' },
   { label: 'Nghiệm thu', status: 'closed', currentWhen: ['closed'], recordedAt: 'last' },
 ]
 

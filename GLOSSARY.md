@@ -41,8 +41,12 @@ Người gửi đưa Ticket đã đóng (Hoàn thành) về Đang xử lý trong
 _Avoid_: Làm lại (khi đã đóng)
 
 **Nghiệm thu**:
-Người gửi xác nhận kết quả của Ticket Đã xử lý và chấm CSAT, đưa Ticket sang Đã đóng.
+Quy trình hai bước đưa Ticket Đã xử lý sang Đã đóng. Bước một: người gửi xác nhận kết quả và chấm CSAT, Ticket sang Chờ duyệt. Bước hai: Trưởng phòng của phòng gửi duyệt thì Ticket Đã đóng; từ chối (kèm lý do) thì Ticket về Đang xử lý và điểm CSAT bị xóa.
 _Avoid_: Duyệt, xác nhận
+
+**Chờ duyệt**:
+Trạng thái sau khi người gửi đã nghiệm thu bước một, đang chờ Trưởng phòng của phòng gửi duyệt. Không còn là Ticket hoạt động.
+_Avoid_: Chờ nghiệm thu
 
 **CSAT**:
 Điểm hài lòng nguyên từ 1 đến 5 do người gửi chấm khi nghiệm thu, kèm ghi chú tùy chọn.

@@ -4,6 +4,7 @@ import { PRIORITY_LABELS, STATUS_LABELS, TICKET_PRIORITIES } from '../../domain/
 import type { Ticket, TicketPriority, Viewer } from '../../domain/ticket.ts'
 import {
   HANDLER_STATUSES,
+  canApproveResult,
   canAssign,
   canCancel,
   canConfirmResult,
@@ -16,7 +17,9 @@ import { canTransition } from '../../domain/ticketTransitions.ts'
 import { Button } from '../ui/Button.tsx'
 import { CONTROL_CLASS } from '../ui/controlStyles.ts'
 import { DatePicker } from '../ui/DatePicker.tsx'
+import { Icon } from '../ui/Icon.tsx'
 import { Select } from '../ui/Select.tsx'
+import { STATUS_MARK_CLASSES } from './ticketStyles.ts'
 
 const RATING_VALUES = [1, 2, 3, 4, 5]
 const RATING_LABELS: Record<number, string> = {
@@ -38,6 +41,8 @@ interface TicketActionsProps {
   onAssign: (assigneeName: string) => void
   onChangeStatus: (status: Ticket['status']) => void
   onConfirm: (rating: number, feedback?: string) => void
+  onApprove: () => void
+  onRejectApproval: (reason: string) => void
   onReopen: (reason: string) => void
   onChangePriority?: (priority: TicketPriority) => void
   onChangeDueDate?: (dueDate: string) => void
@@ -72,19 +77,34 @@ function ProgressSection({ ticket, onChangeStatus }: Pick<TicketActionsProps, 't
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs font-bold text-ink uppercase tracking-wider">Cập nhật tiến trình thực hiện</p>
-      <div className="flex flex-wrap gap-2">
-        {HANDLER_STATUSES.map((status) => (
-          <Button
-            key={status}
-            variant="secondary"
-            disabled={ticket.status === status || !canTransition(ticket.status, status)}
-            onClick={() => onChangeStatus(status)}
-            className="text-xs px-3 py-1.5"
-          >
-            {STATUS_LABELS[status]}
-          </Button>
-        ))}
-      </div>
+      <ul className="flex flex-col gap-1.5">
+        {HANDLER_STATUSES.map((status) => {
+          const isCurrent = ticket.status === status
+          const isSelectable = !isCurrent && canTransition(ticket.status, status)
+          return (
+            <li key={status}>
+              <button
+                type="button"
+                disabled={!isSelectable}
+                aria-current={isCurrent ? 'true' : undefined}
+                onClick={() => onChangeStatus(status)}
+                className={`flex w-full items-center gap-2.5 rounded-md border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-600/40 ${
+                  isCurrent
+                    ? 'border-accent-600 bg-accent-100 font-semibold text-ink'
+                    : isSelectable
+                      ? 'border-line-strong bg-surface text-ink hover:border-accent-600 hover:bg-canvas'
+                      : 'cursor-not-allowed border-line bg-canvas text-ink-muted opacity-60'
+                }`}
+              >
+                <span aria-hidden="true" className={`size-2.5 shrink-0 rounded-full ${STATUS_MARK_CLASSES[status]}`} />
+                <span className="flex-1">{STATUS_LABELS[status]}</span>
+                {isCurrent && <span className="text-[11px] font-semibold text-accent-700">Hiện tại</span>}
+                {isSelectable && <Icon name="chevronRight" className="size-4 text-ink-muted" />}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
@@ -255,9 +275,33 @@ function ConfirmSection({
 
       <div className="flex flex-wrap gap-2 pt-1">
         <Button disabled={!rating} onClick={() => onConfirm(rating, feedback.trim() || undefined)}>
-          Xác nhận nghiệm thu
+          Nghiệm thu và gửi Trưởng phòng duyệt
         </Button>
       </div>
+    </div>
+  )
+}
+
+function ApproveSection({
+  onApprove,
+  onRejectApproval,
+}: Pick<TicketActionsProps, 'onApprove' | 'onRejectApproval'>) {
+  const [reason, setReason] = useState('')
+
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-ochre-500/30 bg-ochre-100/20 p-3">
+      <p className="text-xs font-bold text-ink uppercase tracking-wider">Duyệt nghiệm thu của phòng bạn</p>
+      <Button onClick={onApprove}>Duyệt nghiệm thu và đóng yêu cầu</Button>
+      <input
+        type="text"
+        placeholder="Lý do từ chối duyệt..."
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        className={CONTROL_CLASS}
+      />
+      <Button variant="danger" disabled={!reason.trim()} onClick={() => onRejectApproval(reason.trim())}>
+        Từ chối duyệt
+      </Button>
     </div>
   )
 }
@@ -268,6 +312,8 @@ export function TicketActions({
   onAssign,
   onChangeStatus,
   onConfirm,
+  onApprove,
+  onRejectApproval,
   onReopen,
   onChangePriority,
   onChangeDueDate,
@@ -279,9 +325,10 @@ export function TicketActions({
   const showDueDate = canEditDueDate(ticket, viewer) && Boolean(onChangeDueDate)
   const showCancel = canCancel(ticket, viewer) && Boolean(onCancelTicket)
   const showConfirm = canConfirmResult(ticket, viewer)
+  const showApprove = canApproveResult(ticket, viewer)
   const showReopen = canReopen(ticket, viewer)
 
-  if (!showAssign && !showProgress && !showConfirm && !showReopen && !showPriority && !showDueDate && !showCancel) {
+  if (!showAssign && !showProgress && !showConfirm && !showApprove && !showReopen && !showPriority && !showDueDate && !showCancel) {
     return <p className="px-4 py-4 text-xs text-ink-muted">Bạn không có quyền thao tác trên yêu cầu này.</p>
   }
 
@@ -292,6 +339,7 @@ export function TicketActions({
       {showPriority && onChangePriority && <PrioritySection ticket={ticket} onChangePriority={onChangePriority} />}
       {showDueDate && onChangeDueDate && <DueDateSection ticket={ticket} onChangeDueDate={onChangeDueDate} />}
       {showConfirm && <ConfirmSection onConfirm={onConfirm} />}
+      {showApprove && <ApproveSection onApprove={onApprove} onRejectApproval={onRejectApproval} />}
       {showReopen && (
         <ReopenSection
           prompt="Kết quả chưa đạt hoặc phát sinh thêm việc?"

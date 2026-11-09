@@ -1,20 +1,24 @@
 import { createApp } from './app.ts'
-import { loadEnvironmentConfig, requireDatabaseUrl } from './config/environment.ts'
+import { loadEnvironmentConfig, requireMongoUri } from './config/environment.ts'
 import { createDatabaseConnection } from './db/connection.ts'
 import { runMigrations } from './db/migrator.ts'
 import { DeadlineService } from './notifications/deadlineService.ts'
+import { ConsoleEmailService, ResendEmailService } from './notifications/emailService.ts'
 import { NotificationService } from './notifications/notificationService.ts'
 import { FirebasePushGateway } from './notifications/pushGateway.ts'
-import { PostgresTicketStore } from './repositories/postgresTicketStore.ts'
+import { MongoTicketStore } from './repositories/mongoTicketStore.ts'
 
 // Entrypoint executing HTTP listener
 const config = loadEnvironmentConfig()
 
-// Fail fast when the database is not configured instead of silently falling back to memory
-const connection = createDatabaseConnection(requireDatabaseUrl(config))
-await runMigrations(connection.executor)
-const store = new PostgresTicketStore(connection.db)
+// Fail fast when MongoDB is not configured instead of silently falling back to memory
+const connection = createDatabaseConnection(requireMongoUri(config), config.mongodbDbName)
+await runMigrations(connection.db)
+const store = new MongoTicketStore(connection.db)
 const pushGateway = new FirebasePushGateway()
+const emailService = config.resendApiKey
+  ? new ResendEmailService(config.resendApiKey, config.resendFromEmail)
+  : new ConsoleEmailService()
 const notificationService = new NotificationService(store, undefined, () => new Date(), pushGateway)
 const deadlineService = new DeadlineService(store, notificationService)
 
@@ -26,6 +30,7 @@ const app = createApp(config, {
   notificationService,
   deadlineService,
   pushGateway,
+  emailService,
 })
 
 const server = app.listen(config.port, () => {

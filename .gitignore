@@ -11,3 +11,8 @@ web/.vitest
 .env
 .env.*
 !.env.example
+
+api/uploads
+
+# Firebase service account credentials
+*firebase-adminsdk*.json

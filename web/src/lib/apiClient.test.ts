@@ -193,4 +193,54 @@ describe('ApiClient', () => {
     await client.cms.getAuditLogs()
     expect(capturedUrl).toBe('/api/cms/audit-logs')
   })
+
+  it('should_execute_auth_registration_and_verification_api_calls', async () => {
+    let capturedUrl = ''
+    let capturedMethod = ''
+    let capturedBody = ''
+
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      capturedUrl = String(url)
+      capturedMethod = init?.method || 'GET'
+      capturedBody = String(init?.body || '')
+      return new Response(JSON.stringify({ status: 'ok', departments: ['Kinh doanh'] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }) as any
+
+    const client = new ApiClient('/api')
+
+    await client.auth.getDepartments()
+    expect(capturedUrl).toBe('/api/auth/departments')
+    expect(capturedMethod).toBe('GET')
+
+    await client.auth.register({
+      username: 'nv001',
+      name: 'Nguyễn Văn Một',
+      department: 'Kinh doanh',
+      role: 'staff',
+      email: 'vanmot@gmail.com',
+      password: 'password123',
+    })
+    expect(capturedUrl).toBe('/api/auth/register')
+    expect(capturedMethod).toBe('POST')
+    expect(capturedBody).toContain('vanmot@gmail.com')
+
+    await client.auth.verifyEmail('tok-123')
+    expect(capturedUrl).toBe('/api/auth/verify-email')
+    expect(capturedMethod).toBe('POST')
+    expect(capturedBody).toContain('tok-123')
+
+    await client.auth.verifyEmail('654321', 'nv001')
+    expect(capturedUrl).toBe('/api/auth/verify-email')
+    expect(capturedMethod).toBe('POST')
+    expect(capturedBody).toContain('654321')
+    expect(capturedBody).toContain('nv001')
+
+    await client.auth.resendVerification('nv001')
+    expect(capturedUrl).toBe('/api/auth/resend-verification')
+    expect(capturedMethod).toBe('POST')
+    expect(capturedBody).toContain('nv001')
+  })
 })

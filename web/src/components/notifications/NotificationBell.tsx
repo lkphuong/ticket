@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../../lib/apiClient.ts'
 import type { AppNotification } from '../../lib/apiClient.ts'
+import { isPushAvailable, requestPushToken, subscribeToForegroundPush } from '../../lib/firebaseMessaging.ts'
 import { formatDateTime } from '../../lib/formatDate.ts'
 import { useToast } from '../../lib/toastContext.ts'
 import { Button } from '../ui/Button.tsx'
@@ -15,7 +16,7 @@ export function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
-  const [pushSupported] = useState<boolean>(() => typeof window !== 'undefined' && 'Notification' in window)
+  const [pushSupported, setPushSupported] = useState(false)
   const [pushPermission, setPushPermission] = useState<NotificationPermission>(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       return Notification.permission
@@ -51,6 +52,33 @@ export function NotificationBell() {
     }
   }, [])
 
+  // Detects push support, refreshes the device token when already permitted, and surfaces pushes received while the tab is open
+  useEffect(() => {
+    let active = true
+    let unsubscribe = () => {}
+    void isPushAvailable().then(async (available) => {
+      if (!active || !available) return
+      setPushSupported(true)
+      if (Notification.permission !== 'granted') return
+      try {
+        await apiClient.notifications.registerDevice(await requestPushToken())
+        unsubscribe = subscribeToForegroundPush((message) => {
+          notify(`${message.title}: ${message.body}`, 'info')
+          void apiClient.notifications.list().then((res) => {
+            setNotifications(res.notifications)
+            setUnreadCount(res.unreadCount)
+          })
+        })
+      } catch {
+        // Push stays optional; the polled feed keeps working
+      }
+    })
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [notify])
+
   // Dismisses popover when clicking outside the panel container
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -71,9 +99,9 @@ export function NotificationBell() {
       await apiClient.notifications.markAllRead()
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
       setUnreadCount(0)
-      notify('Đã đánh dấu tất cả thông báo là đã đọc.', 'neutral')
+      notify('Đã đánh dấu tất cả thông báo là đã đọc.', 'info')
     } catch {
-      notify('Không thể cập nhật trạng thái thông báo.', 'danger')
+      notify('Không thể cập nhật trạng thái thông báo.', 'error')
     }
   }
 
@@ -100,15 +128,13 @@ export function NotificationBell() {
       setPushPermission(permission)
 
       if (permission === 'granted') {
-        // Generate simulated browser device registration token
-        const dummyToken = `browser-token-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-        await apiClient.notifications.registerDevice(dummyToken)
+        await apiClient.notifications.registerDevice(await requestPushToken())
         notify('Đã kích hoạt thông báo đẩy trên trình duyệt thành công.', 'success')
       } else if (permission === 'denied') {
-        notify('Bạn đã từ chối quyền thông báo đẩy. Bạn vẫn có thể xem danh sách thông báo tại đây.', 'neutral')
+        notify('Bạn đã từ chối quyền thông báo đẩy. Bạn vẫn có thể xem danh sách thông báo tại đây.', 'info')
       }
     } catch {
-      notify('Không thể đăng ký thông báo đẩy trình duyệt.', 'danger')
+      notify('Không thể đăng ký thông báo đẩy trình duyệt.', 'error')
     }
   }
 

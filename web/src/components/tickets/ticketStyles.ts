@@ -5,6 +5,7 @@ export const STATUS_TONE_CLASSES: Record<TicketStatus, string> = {
   in_progress: 'bg-blue-100 text-blue-700',
   waiting: 'bg-ochre-100 text-ochre-800',
   resolved: 'bg-moss-100 text-moss-700',
+  pending_approval: 'bg-ochre-100 text-ochre-800',
   closed: 'bg-ash-200 text-ash-700',
 }
 
@@ -14,6 +15,7 @@ export const STATUS_MARK_CLASSES: Record<TicketStatus, string> = {
   in_progress: 'bg-blue-700',
   waiting: 'bg-ochre-500',
   resolved: 'bg-moss-700',
+  pending_approval: 'bg-ochre-500',
   closed: 'bg-ash-700',
 }
 
@@ -31,6 +33,7 @@ export const STATUS_RING_CLASSES: Record<TicketStatus, string> = {
   in_progress: 'ring-blue-700',
   waiting: 'ring-ochre-500',
   resolved: 'ring-moss-700',
+  pending_approval: 'ring-ochre-500',
   closed: 'ring-ash-700',
 }
 

@@ -2,7 +2,10 @@
 
 import { calculateTicketSla } from '@vtdesk/domain'
 import type { ITicketStore } from '../repositories/interfaces.ts'
-import type { NotificationService } from './notificationService.ts'
+import type { NotificationService, TicketDomainEvent } from './notificationService.ts'
+
+const MILLISECONDS_PER_DAY = 86400000
+const ISO_DATE_LENGTH = 10
 
 export interface DeadlineCheckResult {
   readonly scannedCount: number
@@ -40,57 +43,35 @@ export class DeadlineService {
     }
   }
 
-  // Scans all active tickets and dispatches deadline notifications according to SLA rules
+  // Scans tickets near or past their due date and dispatches deadline notifications according to SLA rules
   async checkDeadlines(currentTime: Date = this.clock()): Promise<DeadlineCheckResult> {
-    const allTickets = await this.store.tickets.findAll()
-    const impendingSent: string[] = []
-    const overdueSent: string[] = []
+    // Only tickets due tomorrow or earlier can be impending or overdue, so later ones are never loaded
+    const tomorrow = new Date(currentTime.getTime() + MILLISECONDS_PER_DAY).toISOString().slice(0, ISO_DATE_LENGTH)
+    const candidates = await this.store.tickets.findDeadlineCandidates(tomorrow)
 
-    for (const ticket of allTickets) {
-      // 1. Skip tickets without due date or completed tickets (closed, resolved)
-      if (!ticket.dueDate || ticket.status === 'closed' || ticket.status === 'resolved') {
-        continue
-      }
+    const dueEvents = candidates.flatMap((ticket): TicketDomainEvent[] => {
+      const { daysDiff } = calculateTicketSla(ticket, currentTime)
+      if (daysDiff === 1) return [{ type: 'deadline_impending', ticket }]
+      if (daysDiff < 0) return [{ type: 'deadline_overdue', ticket }]
+      return []
+    })
 
-      // 2. SLA pauses during waiting state; skip warnings while paused
-      if (ticket.status === 'waiting') {
-        continue
-      }
+    // Enforce once-per-ticket idempotency with one lookup per notification type
+    const ticketIds = dueEvents.map((event) => event.ticket.id)
+    const [alreadyImpending, alreadyOverdue] = await Promise.all([
+      this.store.notifications.findExistingKeys(ticketIds, 'deadline_impending'),
+      this.store.notifications.findExistingKeys(ticketIds, 'deadline_overdue'),
+    ])
+    const eventsToSend = dueEvents.filter(
+      (event) => !(event.type === 'deadline_impending' ? alreadyImpending : alreadyOverdue).has(event.ticket.id),
+    )
 
-      // 3. Compute domain SLA metrics using injected clock
-      const sla = calculateTicketSla(ticket, currentTime)
-
-      // 4. Case: Impending deadline (exactly 1 day remaining)
-      if (sla.daysDiff === 1) {
-        // Enforce once-per-ticket idempotency rule to prevent redundant alerts
-        const existingImpending = await this.store.notifications.findByTicketAndType(ticket.id, 'deadline_impending')
-        if (existingImpending.length === 0) {
-          await this.notificationService.dispatch({
-            type: 'deadline_impending',
-            ticket,
-          })
-          impendingSent.push(ticket.id)
-        }
-      }
-
-      // 5. Case: Overdue deadline (past due date)
-      if (sla.daysDiff < 0) {
-        // Enforce once-per-ticket idempotency rule to prevent redundant alerts
-        const existingOverdue = await this.store.notifications.findByTicketAndType(ticket.id, 'deadline_overdue')
-        if (existingOverdue.length === 0) {
-          await this.notificationService.dispatch({
-            type: 'deadline_overdue',
-            ticket,
-          })
-          overdueSent.push(ticket.id)
-        }
-      }
-    }
+    await this.notificationService.dispatchMany(eventsToSend)
 
     return {
-      scannedCount: allTickets.length,
-      impendingSent,
-      overdueSent,
+      scannedCount: candidates.length,
+      impendingSent: eventsToSend.filter((e) => e.type === 'deadline_impending').map((e) => e.ticket.id),
+      overdueSent: eventsToSend.filter((e) => e.type === 'deadline_overdue').map((e) => e.ticket.id),
     }
   }
 }

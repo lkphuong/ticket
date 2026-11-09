@@ -10,13 +10,17 @@ import { Avatar } from '../ui/Avatar.tsx'
 import { Button } from '../ui/Button.tsx'
 import { Icon } from '../ui/Icon.tsx'
 import type { IconName } from '../ui/Icon.tsx'
-import { ThemeToggle } from '../ui/ThemeToggle.tsx'
 
 const NEW_TICKET_PATH = '/tickets/new'
 
 const BASE_NAV_ITEMS: { to: string; label: string; end: boolean; icon: IconName }[] = [
   { to: '/', label: 'Tổng quan', end: true, icon: 'home' },
   { to: '/tickets', label: 'Yêu cầu hỗ trợ', end: false, icon: 'inbox' },
+]
+
+const ADMIN_NAV_ITEMS: { to: string; label: string; end: boolean; icon: IconName }[] = [
+  { to: '/cms', label: 'Quản trị hệ thống', end: false, icon: 'cog' },
+  { to: '/tickets', label: 'Danh sách yêu cầu', end: false, icon: 'inbox' },
 ]
 
 function navLinkClass(isActive: boolean): string {
@@ -82,10 +86,10 @@ export function AppShell() {
   const waitingCount = buildInbox(tickets, viewer).reduce((sum, group) => sum + group.tickets.length, 0)
   const role = getViewerRole(viewer)
 
-  // Administrators operate as read-only supervisors and have CMS administration privileges
+  // Administrators manage the system and only view tickets; they have no personal dashboard or ticket creation
   const navItems =
     role === 'admin'
-      ? [...BASE_NAV_ITEMS, { to: '/cms', label: 'Quản trị hệ thống', end: false, icon: 'cog' as IconName }]
+      ? ADMIN_NAV_ITEMS
       : [...BASE_NAV_ITEMS, { to: NEW_TICKET_PATH, label: 'Tạo yêu cầu', end: true, icon: 'plus' as IconName }]
 
   return (
@@ -99,7 +103,6 @@ export function AppShell() {
               <ViewerSummary onOpenSettings={() => setIsSettingsOpen(true)} />
             </div>
             <NotificationBell />
-            <ThemeToggle />
           </div>
         </div>
         <div className="mx-auto max-w-6xl px-4 md:px-8">

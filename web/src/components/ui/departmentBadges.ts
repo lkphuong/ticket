@@ -21,15 +21,17 @@ const DEPARTMENT_BADGES: Record<Department, DepartmentBadge> = {
   'Hành chính': { code: 'HC', icon: 'building', ground: '#556073', ink: '#ffffff' },
 }
 
+const DEFAULT_BADGE: DepartmentBadge = { code: 'PB', icon: 'building', ground: '#556073', ink: '#ffffff' }
+
 export function departmentCode(department: Department): string {
-  return DEPARTMENT_BADGES[department].code
+  return DEPARTMENT_BADGES[department]?.code ?? DEFAULT_BADGE.code
 }
 
 export function departmentIcon(department: Department): IconName {
-  return DEPARTMENT_BADGES[department].icon
+  return DEPARTMENT_BADGES[department]?.icon ?? DEFAULT_BADGE.icon
 }
 
 export function badgeStyleFor(department: Department): CSSProperties {
-  const { ground, ink } = DEPARTMENT_BADGES[department]
-  return { backgroundColor: ground, color: ink }
+  const badge = DEPARTMENT_BADGES[department] ?? DEFAULT_BADGE
+  return { backgroundColor: badge.ground, color: badge.ink }
 }

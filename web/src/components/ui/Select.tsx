@@ -19,6 +19,7 @@ interface SelectProps<Value extends string> {
   compact?: boolean
   invalid?: boolean
   describedBy?: string
+  className?: string
 }
 
 export function Select<Value extends string>({
@@ -31,6 +32,7 @@ export function Select<Value extends string>({
   compact = false,
   invalid = false,
   describedBy,
+  className = '',
 }: SelectProps<Value>) {
   const listboxId = useId()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -99,7 +101,7 @@ export function Select<Value extends string>({
         onKeyDown={handleKeyDown}
         className={`${compact ? COMPACT_SELECT_CLASS : SELECT_CLASS} flex items-center text-left ${
           invalid ? 'border-brick-500' : ''
-        }`}
+        } ${className}`}
       >
         <span className={`flex min-w-0 items-center gap-2 ${selected ? '' : 'text-ink-muted/70'}`}>
           {selected?.leading}

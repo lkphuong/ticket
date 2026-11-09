@@ -142,7 +142,7 @@ describe('CMS and notifications contract tests against API', () => {
     expect(createDeptRes.status).toBe(201)
 
     const listDeptRes = await request(app)
-      .get('/api/cms/departments')
+      .get('/api/cms/departments/options')
       .set('Authorization', `Bearer ${adminToken}`)
     expect(listDeptRes.status).toBe(200)
     expect(listDeptRes.body.departments).toContain('Chuyển đổi số')

@@ -3,6 +3,7 @@ import {
   addDays,
   buildComment,
   buildTicket,
+  canApproveResult,
   canCancel,
   canEditDueDate,
   canEditPriority,
@@ -26,6 +27,8 @@ import type {
 } from '@vtdesk/domain'
 import type { ITicketStore } from '../repositories/interfaces.ts'
 import type { NotificationService, TicketDomainEvent } from '../notifications/notificationService.ts'
+import { ATTACHMENT_ID_PATTERN } from '../attachments/attachmentStorage.ts'
+import { assertWithinTicketLimits } from './ticketLimits.ts'
 
 export interface CreateTicketInput {
   readonly title: string
@@ -39,6 +42,8 @@ export interface CreateTicketInput {
     readonly name: string
     readonly size?: number
     readonly sizeKb?: number
+    readonly id?: string
+    readonly mimeType?: string
   }>
 }
 
@@ -71,6 +76,21 @@ export class TicketValidationError extends Error {
     super(message)
     this.name = 'TicketValidationError'
     this.errors = errors
+  }
+}
+
+const BYTES_PER_KB = 1024
+
+// Converts a client-supplied attachment into the domain shape, rejecting references that cannot be uploaded files
+function normalizeAttachment(att: NonNullable<CreateTicketInput['attachments']>[number]) {
+  if (att.id !== undefined && !ATTACHMENT_ID_PATTERN.test(att.id)) {
+    throw new TicketValidationError('Tệp đính kèm không hợp lệ.', { attachments: 'Tệp đính kèm không hợp lệ.' })
+  }
+  return {
+    name: att.name,
+    sizeKb: att.sizeKb ?? (att.size ? Math.round(att.size / BYTES_PER_KB) : 0),
+    ...(att.id && { id: att.id }),
+    ...(att.mimeType && { mimeType: att.mimeType }),
   }
 }
 
@@ -115,6 +135,12 @@ export class TicketService {
     }
   }
 
+  // Persists a modified ticket after confirming its embedded comments and history stay within the soft limits
+  private async saveWithinLimits(ticket: Ticket): Promise<void> {
+    assertWithinTicketLimits(ticket)
+    await this.store.tickets.save(ticket)
+  }
+
   // Creates a validated work ticket and safely allocates an incremental sequential ID
   async createTicket(input: CreateTicketInput, creator: TicketCreator): Promise<Ticket> {
     // 1. Enforce organizational role constraint: System Administrators supervise only
@@ -148,10 +174,7 @@ export class TicketService {
       priority: input.priority,
       toDepartment: (input.toDepartment ?? '') as Department,
       dueDate: resolvedDueDate,
-      attachments: (input.attachments ?? []).map((att) => ({
-        name: att.name,
-        sizeKb: att.sizeKb ?? (att.size ? Math.round(att.size / 1024) : 0),
-      })),
+      attachments: (input.attachments ?? []).map(normalizeAttachment),
     }
 
     // 3. Run pure domain validation rules
@@ -198,10 +221,8 @@ export class TicketService {
     }
 
     // 3. Ensure designated assignee is an active member belonging to the receiving department
-    const members = await this.store.members.findAll()
-    const targetMember = members.find(
-      (m) => m.name === assigneeName && m.department === ticket.toDepartment && m.isActive,
-    )
+    const candidates = await this.store.members.findByNames([assigneeName])
+    const targetMember = candidates.find((m) => m.department === ticket.toDepartment && m.isActive)
     if (!targetMember) {
       throw new TicketValidationError('Người được giao phải là thành viên đang hoạt động của phòng tiếp nhận.', {
         assigneeName: 'Người được giao không thuộc phòng tiếp nhận hoặc đã bị khóa.',
@@ -235,7 +256,7 @@ export class TicketService {
       updatedAt: timestamp,
     }
 
-    await this.store.tickets.save(updatedTicket)
+    await this.saveWithinLimits(updatedTicket)
 
     await this.safeDispatch({
       type: 'ticket_assigned',
@@ -283,7 +304,7 @@ export class TicketService {
       updatedAt: timestamp,
     }
 
-    await this.store.tickets.save(updatedTicket)
+    await this.saveWithinLimits(updatedTicket)
     return updatedTicket
   }
 
@@ -334,7 +355,7 @@ export class TicketService {
       updatedAt: timestamp,
     }
 
-    await this.store.tickets.save(updatedTicket)
+    await this.saveWithinLimits(updatedTicket)
     return updatedTicket
   }
 
@@ -366,6 +387,13 @@ export class TicketService {
     if (targetStatus === 'closed') {
       throw new TicketValidationError('Không thể đóng yêu cầu trực tiếp qua cập nhật tiến độ.', {
         status: 'Không thể chuyển trực tiếp sang trạng thái Đã đóng.',
+      })
+    }
+
+    // 3b. Pending approval is reached only through the requester's confirmation
+    if (targetStatus === 'pending_approval') {
+      throw new TicketValidationError('Chỉ người gửi mới đưa được yêu cầu sang "Chờ duyệt" bằng cách nghiệm thu.', {
+        status: 'Không thể chuyển trực tiếp sang trạng thái Chờ duyệt.',
       })
     }
 
@@ -421,7 +449,7 @@ export class TicketService {
       updatedAt: timestamp,
     }
 
-    await this.store.tickets.save(updatedTicket)
+    await this.saveWithinLimits(updatedTicket)
 
     if (targetStatus === 'waiting') {
       await this.safeDispatch({
@@ -446,7 +474,7 @@ export class TicketService {
     ticketId: string,
     body: string,
     creator: TicketCreator,
-    attachments: Array<{ name: string; size?: number; sizeKb?: number }> = [],
+    attachments: CreateTicketInput['attachments'] = [],
   ): Promise<{ comment: TicketComment; ticket: Ticket }> {
     const ticket = await this.store.tickets.findById(ticketId)
     if (!ticket) {
@@ -481,10 +509,7 @@ export class TicketService {
 
     const now = this.clock()
     const timestamp = now.toISOString()
-    const parsedAttachments = attachments.map((att) => ({
-      name: att.name,
-      sizeKb: att.sizeKb ?? (att.size ? Math.round(att.size / 1024) : 0),
-    }))
+    const parsedAttachments = attachments.map(normalizeAttachment)
 
     const comment = buildComment(
       trimmedBody,
@@ -535,7 +560,7 @@ export class TicketService {
       updatedAt: timestamp,
     }
 
-    await this.store.tickets.save(updatedTicket)
+    await this.saveWithinLimits(updatedTicket)
 
     await this.safeDispatch({
       type: 'comment_added',
@@ -547,7 +572,7 @@ export class TicketService {
     return { comment, ticket: updatedTicket }
   }
 
-  // Confirms ticket resolution, stores CSAT rating and transitions ticket to closed
+  // First acceptance step: the requester confirms the result with a CSAT rating, then the requesting head must approve
   async confirmTicket(
     ticketId: string,
     rating: number,
@@ -584,21 +609,21 @@ export class TicketService {
     const statusHistory = ticket.statusHistory ? [...ticket.statusHistory] : []
 
     statusHistory.push({
-      status: 'closed',
+      status: 'pending_approval',
       at: timestamp,
       actor,
     })
 
     const updatedTicket: Ticket = {
       ...ticket,
-      status: 'closed',
+      status: 'pending_approval',
       rating,
       feedback: feedback?.trim() || undefined,
       statusHistory,
       updatedAt: timestamp,
     }
 
-    await this.store.tickets.save(updatedTicket)
+    await this.saveWithinLimits(updatedTicket)
 
     await this.safeDispatch({
       type: 'result_confirmed',
@@ -608,6 +633,95 @@ export class TicketService {
     })
 
     return updatedTicket
+  }
+
+  // Second acceptance step: the head of the requesting department approves the confirmed result and closes the ticket
+  async approveTicket(ticketId: string, creator: TicketCreator): Promise<Ticket> {
+    const ticket = await this.requirePendingApproval(ticketId, creator, 'duyệt nghiệm thu')
+
+    const timestamp = this.clock().toISOString()
+    const actor: TicketActor = { name: creator.name, department: creator.department as Department }
+    const statusHistory = [...(ticket.statusHistory ?? []), { status: 'closed' as const, at: timestamp, actor }]
+
+    const updatedTicket: Ticket = { ...ticket, status: 'closed', statusHistory, updatedAt: timestamp }
+
+    await this.saveWithinLimits(updatedTicket)
+
+    await this.safeDispatch({
+      type: 'result_approved',
+      ticket: updatedTicket,
+      actorUsername: creator.username,
+    })
+
+    return updatedTicket
+  }
+
+  // The requesting head refuses the confirmed result; the ticket returns to in_progress and the rating is discarded
+  async rejectApproval(ticketId: string, reason: string, creator: TicketCreator): Promise<Ticket> {
+    const ticket = await this.requirePendingApproval(ticketId, creator, 'từ chối duyệt nghiệm thu')
+
+    const trimmedReason = reason?.trim()
+    if (!trimmedReason) {
+      throw new TicketValidationError('Vui lòng nhập lý do từ chối duyệt nghiệm thu.', {
+        reason: 'Vui lòng nhập lý do từ chối duyệt nghiệm thu.',
+      })
+    }
+
+    const timestamp = this.clock().toISOString()
+    const actor: TicketActor = { name: creator.name, department: creator.department as Department }
+    const statusHistory = [
+      ...(ticket.statusHistory ?? []),
+      { status: 'in_progress' as const, at: timestamp, reason: trimmedReason, actor },
+    ]
+
+    const updatedTicket: Ticket = {
+      ...ticket,
+      status: 'in_progress',
+      rating: undefined,
+      feedback: undefined,
+      statusHistory,
+      updatedAt: timestamp,
+    }
+
+    await this.saveWithinLimits(updatedTicket)
+
+    await this.safeDispatch({
+      type: 'approval_rejected',
+      ticket: updatedTicket,
+      actorUsername: creator.username,
+      reason: trimmedReason,
+    })
+
+    return updatedTicket
+  }
+
+  // Loads a ticket awaiting approval and checks the actor is the head of the requesting department
+  private async requirePendingApproval(ticketId: string, creator: TicketCreator, actionLabel: string): Promise<Ticket> {
+    const ticket = await this.store.tickets.findById(ticketId)
+    if (!ticket) {
+      throw new TicketNotFoundError()
+    }
+
+    const viewer: Viewer = {
+      name: creator.name,
+      department: creator.department as Department,
+      isDepartmentHead: creator.role === 'head' && creator.isDepartmentHead,
+      role: creator.role,
+      isExecutive: creator.role === 'admin',
+    }
+
+    // Authority is checked before state so outsiders learn nothing about the ticket's progress
+    if (!viewer.isDepartmentHead || viewer.department !== ticket.fromDepartment || viewer.isExecutive) {
+      throw new TicketAuthorizationError(`Chỉ Trưởng phòng của phòng gửi mới có quyền ${actionLabel}.`)
+    }
+
+    if (!canApproveResult(ticket, viewer)) {
+      throw new TicketValidationError('Chỉ xử lý được yêu cầu ở trạng thái "Chờ duyệt".', {
+        status: 'Chỉ xử lý được yêu cầu ở trạng thái "Chờ duyệt".',
+      })
+    }
+
+    return ticket
   }
 
   // Returns a resolved ticket back to in_progress for rework while preserving assignee and history
@@ -657,7 +771,7 @@ export class TicketService {
       updatedAt: timestamp,
     }
 
-    await this.store.tickets.save(updatedTicket)
+    await this.saveWithinLimits(updatedTicket)
 
     await this.safeDispatch({
       type: 'ticket_rework',
@@ -737,7 +851,7 @@ export class TicketService {
       updatedAt: timestamp,
     }
 
-    await this.store.tickets.save(updatedTicket)
+    await this.saveWithinLimits(updatedTicket)
 
     await this.safeDispatch({
       type: 'ticket_reopened',
@@ -802,7 +916,7 @@ export class TicketService {
       updatedAt: timestamp,
     }
 
-    await this.store.tickets.save(updatedTicket)
+    await this.saveWithinLimits(updatedTicket)
 
     await this.safeDispatch({
       type: 'ticket_cancelled',

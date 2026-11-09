@@ -30,14 +30,47 @@ export interface CmsMember {
   readonly updatedAt?: string
 }
 
+export interface PageQuery {
+  readonly page?: number
+  readonly limit?: number
+  readonly search?: string
+}
+
+export interface MemberQuery extends PageQuery {
+  readonly department?: string
+  readonly role?: CmsMember['role']
+  readonly status?: 'active' | 'locked'
+}
+
+export interface PageMeta {
+  readonly total: number
+  readonly page: number
+  readonly limit: number
+  readonly totalPages: number
+}
+
+export interface CmsDepartment {
+  readonly name: string
+  readonly codePrefix: string
+  readonly memberCount: number
+}
+
+function buildQueryString(params: Record<string, string | number | undefined>): string {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') query.set(key, String(value))
+  }
+  const text = query.toString()
+  return text ? `?${text}` : ''
+}
+
 export interface CmsAuditLog {
   readonly id: string
   readonly actorUsername: string
-  readonly actorName: string
   readonly action: string
-  readonly targetType: string
-  readonly targetId: string
-  readonly details?: any
+  readonly entityType: string
+  readonly entityId: string
+  readonly details?: string
   readonly createdAt: string
 }
 
@@ -89,23 +122,66 @@ export interface AuthLoginResponse {
   readonly user: UserSessionProfile
 }
 
+export interface RegisterInputPayload {
+  readonly username: string
+  readonly name: string
+  readonly department: string
+  readonly role: 'staff' | 'head'
+  readonly email: string
+  readonly password: string
+}
+
+export interface RegisterResultPayload {
+  readonly id: string
+  readonly username: string
+  readonly name: string
+  readonly department: string
+  readonly role: 'staff' | 'head'
+  readonly email: string
+  readonly message: string
+}
+
+export interface VerifyEmailResultPayload {
+  readonly status: string
+  readonly message: string
+  readonly user?: {
+    readonly username: string
+    readonly email: string
+  }
+}
+
+export interface PublicDepartmentsResponse {
+  readonly departments: string[]
+  readonly occupiedDepartmentHeads?: Record<string, string>
+}
+
 export class ApiError extends Error {
   readonly status: number
   readonly code?: string
   readonly errors?: Record<string, string>
+  // Seconds the caller must wait before retrying, when the server rate limits the request
+  readonly retryAfterSeconds?: number
 
   constructor(
     message: string,
     status: number,
     code?: string,
     errors?: Record<string, string>,
+    retryAfterSeconds?: number,
   ) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.errors = errors
+    this.retryAfterSeconds = retryAfterSeconds
   }
+}
+
+// Reads a positive whole number of seconds from a JSON field or a Retry-After header value
+function parseRetryAfterSeconds(value: unknown): number | undefined {
+  const seconds = Number(value)
+  return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : undefined
 }
 
 let inMemoryToken: string | null = null
@@ -126,11 +202,20 @@ function toVietnameseErrorMessage(status: number, message?: string, errors?: Rec
     case 401:
       return 'Tên đăng nhập hoặc mật khẩu không chính xác.'
     case 403:
+      // Preserves explicit business messages for unverified accounts or manager constraints
+      if (message && (message.includes('xác thực') || message.includes('quản lý'))) return message
       return 'Bạn không có quyền thực hiện thao tác này.'
     case 404:
       return 'Yêu cầu không tồn tại hoặc đã bị xóa.'
     case 400:
       return message || 'Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.'
+    case 409:
+    case 410:
+    case 413:
+    case 423:
+    case 429:
+      // Conflict, expiry, lockout and rate limit messages carry the recovery step for the user
+      return message || 'Yêu cầu chưa thể thực hiện lúc này. Vui lòng thử lại sau.'
     case 500:
     default:
       return 'Lỗi hệ thống máy chủ. Vui lòng thử lại sau.'
@@ -219,7 +304,8 @@ export class ApiClient {
       // Auth endpoints report their own credential failures, so only data calls signal an expired session
       if (response.status === 401 && token && sessionExpiredHandler && !endpoint.startsWith('/auth/')) sessionExpiredHandler()
       const message = toVietnameseErrorMessage(response.status, payload?.message, payload?.errors)
-      throw new ApiError(message, response.status, payload?.error, payload?.errors)
+      const retryAfterSeconds = parseRetryAfterSeconds(payload?.retryAfterSeconds ?? response.headers.get('retry-after'))
+      throw new ApiError(message, response.status, payload?.error, payload?.errors, retryAfterSeconds)
     }
 
     return payload as T
@@ -259,6 +345,31 @@ export class ApiClient {
         method: 'PATCH',
         body: JSON.stringify(data),
       })
+    },
+
+    register: async (payload: RegisterInputPayload): Promise<RegisterResultPayload> => {
+      return this.request<RegisterResultPayload>('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+    },
+
+    verifyEmail: async (token: string, identifier?: string): Promise<VerifyEmailResultPayload> => {
+      return this.request<VerifyEmailResultPayload>('/auth/verify-email', {
+        method: 'POST',
+        body: JSON.stringify({ token, identifier }),
+      })
+    },
+
+    resendVerification: async (identifier: string): Promise<{ status: string; message: string }> => {
+      return this.request<{ status: string; message: string }>('/auth/resend-verification', {
+        method: 'POST',
+        body: JSON.stringify({ identifier }),
+      })
+    },
+
+    getDepartments: async (): Promise<PublicDepartmentsResponse> => {
+      return this.request<PublicDepartmentsResponse>('/auth/departments', { method: 'GET' })
     },
   }
 
@@ -320,6 +431,17 @@ export class ApiClient {
       })
     },
 
+    approve: async (id: string): Promise<{ ticket: Ticket }> => {
+      return this.request(`/tickets/${encodeURIComponent(id)}/approve`, { method: 'POST' })
+    },
+
+    rejectApproval: async (id: string, reason: string): Promise<{ ticket: Ticket }> => {
+      return this.request(`/tickets/${encodeURIComponent(id)}/reject-approval`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      })
+    },
+
     rework: async (id: string, reason: string): Promise<{ ticket: Ticket }> => {
       return this.request(`/tickets/${encodeURIComponent(id)}/rework`, {
         method: 'POST',
@@ -360,6 +482,39 @@ export class ApiClient {
     },
   }
 
+  readonly attachments = {
+    // Sends the raw file bytes; the original name travels in a header because the body carries no metadata
+    upload: async (file: File): Promise<TicketAttachment> => {
+      const { attachment } = await this.request<{ attachment: TicketAttachment }>('/attachments', {
+        method: 'POST',
+        body: file,
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream',
+          'X-File-Name': encodeURIComponent(file.name),
+        },
+      })
+      return attachment
+    },
+
+    uploadAll: (files: File[]): Promise<TicketAttachment[]> => Promise.all(files.map((file) => this.attachments.upload(file))),
+
+    // The session token travels in a header, so content is fetched as a blob instead of linked directly
+    fetchContent: async (id: string, forDownload = false): Promise<Blob> => {
+      const token = getStoredSessionToken()
+      const query = forDownload ? '?download=1' : ''
+      let response: Response
+      try {
+        response = await fetch(`${this.baseUrl}/attachments/${encodeURIComponent(id)}${query}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+      } catch {
+        throw new ApiError('Không thể kết nối đến máy chủ. Vui lòng kiểm tra đường truyền mạng.', 0)
+      }
+      if (!response.ok) throw new ApiError(toVietnameseErrorMessage(response.status), response.status)
+      return response.blob()
+    },
+  }
+
   readonly notifications = {
     list: async (): Promise<{ notifications: AppNotification[]; unreadCount: number }> => {
       return this.request('/notifications', { method: 'GET' })
@@ -390,17 +545,29 @@ export class ApiClient {
   }
 
   readonly cms = {
-    getDepartments: async (): Promise<{ departments: string[] }> => {
-      return this.request('/cms/departments', { method: 'GET' })
+    getDepartmentOptions: async (): Promise<{ departments: string[] }> => {
+      return this.request('/cms/departments/options', { method: 'GET' })
     },
-    createDepartment: async (name: string): Promise<void> => {
+    getDepartments: async (query: PageQuery = {}): Promise<{ departments: CmsDepartment[] } & PageMeta> => {
+      return this.request(`/cms/departments${buildQueryString({ ...query })}`, { method: 'GET' })
+    },
+    createDepartment: async (name: string, codePrefix?: string): Promise<void> => {
       await this.request('/cms/departments', {
         method: 'POST',
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, codePrefix }),
       })
     },
-    getMembers: async (): Promise<{ members: CmsMember[] }> => {
-      return this.request('/cms/members', { method: 'GET' })
+    updateDepartment: async (currentName: string, data: { name?: string; codePrefix?: string }): Promise<void> => {
+      await this.request(`/cms/departments/${encodeURIComponent(currentName)}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      })
+    },
+    deleteDepartment: async (name: string): Promise<void> => {
+      await this.request(`/cms/departments/${encodeURIComponent(name)}`, { method: 'DELETE' })
+    },
+    getMembers: async (query: MemberQuery = {}): Promise<{ members: CmsMember[] } & PageMeta> => {
+      return this.request(`/cms/members${buildQueryString({ ...query })}`, { method: 'GET' })
     },
     createMember: async (data: {
       username: string
@@ -431,6 +598,9 @@ export class ApiClient {
         body: JSON.stringify(data),
       })
     },
+    deleteMember: async (id: string): Promise<void> => {
+      await this.request(`/cms/members/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    },
     lockMember: async (id: string): Promise<{ reassignedTicketsCount: number }> => {
       return this.request(`/cms/members/${encodeURIComponent(id)}/lock`, { method: 'POST' })
     },
@@ -443,8 +613,8 @@ export class ApiClient {
         body: JSON.stringify({ tempPassword }),
       })
     },
-    getAuditLogs: async (): Promise<{ auditLogs: CmsAuditLog[] }> => {
-      return this.request('/cms/audit-logs', { method: 'GET' })
+    getAuditLogs: async (query: PageQuery = {}): Promise<{ auditLogs: CmsAuditLog[] } & PageMeta> => {
+      return this.request(`/cms/audit-logs${buildQueryString({ ...query })}`, { method: 'GET' })
     },
     getTemplates: async (department?: string): Promise<{ templates: CmsTemplate[] }> => {
       const query = department ? `?department=${encodeURIComponent(department)}` : ''

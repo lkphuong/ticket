@@ -8,6 +8,8 @@ export type TicketsAction =
   | { type: 'status_changed'; ticketId: string; status: TicketStatus; changedAt: string; actor?: TicketActor }
   | { type: 'assignee_set'; ticketId: string; assigneeName: string; changedAt: string; actor?: TicketActor }
   | { type: 'result_confirmed'; ticketId: string; rating: number; feedback?: string; changedAt: string; actor?: TicketActor }
+  | { type: 'result_approved'; ticketId: string; changedAt: string; actor?: TicketActor }
+  | { type: 'approval_rejected'; ticketId: string; reason: string; changedAt: string; actor?: TicketActor }
   | { type: 'comment_added'; ticketId: string; comment: TicketComment }
   | { type: 'priority_changed'; ticketId: string; priority: TicketPriority; changedAt: string }
   | { type: 'due_date_changed'; ticketId: string; dueDate: string; changedAt: string }
@@ -54,6 +56,11 @@ function validateOnTicket(ticket: Ticket, action: TicketsAction): string | null 
         return `Điểm đánh giá phải là số nguyên từ ${MIN_RATING} đến ${MAX_RATING}.`
       }
       return null
+    case 'result_approved':
+      return ticket.status === 'pending_approval' ? null : 'Chỉ duyệt được yêu cầu ở trạng thái "Chờ duyệt".'
+    case 'approval_rejected':
+      if (ticket.status !== 'pending_approval') return 'Chỉ từ chối duyệt được yêu cầu ở trạng thái "Chờ duyệt".'
+      return action.reason.trim() ? null : 'Vui lòng nhập lý do từ chối duyệt.'
     case 'ticket_cancelled':
       if (!isActiveTicket(ticket)) return 'Chỉ hủy được yêu cầu còn hoạt động.'
       return action.reason.trim() ? null : 'Vui lòng nhập lý do hủy yêu cầu.'
@@ -122,10 +129,21 @@ export function ticketsReducer(tickets: Ticket[], action: TicketsAction): Ticket
     case 'assignee_set':
       return updateTicket(tickets, action.ticketId, (ticket) => applyAssignment(ticket, action.assigneeName, action.changedAt, action.actor))
     case 'result_confirmed':
+      // The requester's confirmation is only the first acceptance step; the requesting head closes the ticket
       return updateTicket(tickets, action.ticketId, (ticket) => ({
-        ...withStatusChange(ticket, 'closed', action.changedAt, { actor: action.actor }),
+        ...withStatusChange(ticket, 'pending_approval', action.changedAt, { actor: action.actor }),
         rating: action.rating,
         feedback: action.feedback,
+      }))
+    case 'result_approved':
+      return updateTicket(tickets, action.ticketId, (ticket) =>
+        withStatusChange(ticket, 'closed', action.changedAt, { actor: action.actor }),
+      )
+    case 'approval_rejected':
+      return updateTicket(tickets, action.ticketId, (ticket) => ({
+        ...withStatusChange(ticket, 'in_progress', action.changedAt, { reason: action.reason.trim(), actor: action.actor }),
+        rating: undefined,
+        feedback: undefined,
       }))
     case 'comment_added':
       return updateTicket(tickets, action.ticketId, (ticket) => applyComment(ticket, action.comment))

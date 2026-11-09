@@ -36,6 +36,12 @@ describe('Ticket Lifecycle Actions: Confirm, Rework, Reopen & Cancel API', () =>
       .send({ username: 'minhanh', password: 'ticket123' })
     const requesterToken = requesterLogin.body.token
 
+    // Authenticate Requesting Department Head in Kinh doanh (quocbao)
+    const requestingHeadLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'quocbao', password: 'ticket123' })
+    const requestingHeadToken = requestingHeadLogin.body.token
+
     // Authenticate Other Staff in Kinh doanh (quangvinh)
     const otherStaffLogin = await request(app)
       .post('/api/auth/login')
@@ -52,6 +58,7 @@ describe('Ticket Lifecycle Actions: Confirm, Rework, Reopen & Cancel API', () =>
       adminToken,
       headItToken,
       requesterToken,
+      requestingHeadToken,
       otherStaffToken,
       setClock,
     }
@@ -122,14 +129,14 @@ describe('Ticket Lifecycle Actions: Confirm, Rework, Reopen & Cancel API', () =>
       expect(res.body.message).toContain('Điểm đánh giá phải là số nguyên từ 1 đến 5')
     }
 
-    // Valid CSAT rating succeeds and closes the ticket
+    // Valid CSAT rating succeeds and moves the ticket to the head approval step
     const validRes = await request(app)
       .post(`/api/tickets/${resolvedTicket.id}/confirm`)
       .set('Authorization', `Bearer ${requesterToken}`)
       .send({ rating: 5, feedback: 'Xử lý cực nhanh và chuyên nghiệp' })
 
     expect(validRes.status).toBe(200)
-    expect(validRes.body.ticket.status).toBe('closed')
+    expect(validRes.body.ticket.status).toBe('pending_approval')
     expect(validRes.body.ticket.rating).toBe(5)
     expect(validRes.body.ticket.feedback).toBe('Xử lý cực nhanh và chuyên nghiệp')
   })
@@ -394,5 +401,128 @@ describe('Ticket Lifecycle Actions: Confirm, Rework, Reopen & Cancel API', () =>
     expect(res.status).toBe(200)
     expect(res.body.ticket.rating).toBe(5)
     expect(res.body.ticket.feedback).toBe('Kỹ thuật viên hỗ trợ rất nhiệt tình và chu đáo.')
+  })
+  describe('two-step acceptance', () => {
+    const pendingTicket = (): Ticket => ({
+      id: 'TCK-PENDING-APPROVAL',
+      title: 'Cấp quyền truy cập thư mục chung',
+      description: 'Cần quyền ghi vào thư mục kế hoạch kinh doanh',
+      purpose: 'Chia sẻ tài liệu',
+      expectedResult: 'Ghi được tệp',
+      priority: 'medium',
+      status: 'pending_approval',
+      requesterName: 'Nguyễn Minh Anh',
+      fromDepartment: 'Kinh doanh',
+      toDepartment: 'Công nghệ thông tin',
+      assigneeName: 'Hoàng Gia Huy',
+      rating: 4,
+      attachments: [],
+      createdAt: '2026-11-05T08:00:00.000Z',
+      updatedAt: '2026-11-05T09:00:00.000Z',
+      comments: [],
+    })
+
+    it('should_close_ticket_when_requesting_head_approves', async () => {
+      const { app, store, requestingHeadToken } = await setup()
+      const ticket = pendingTicket()
+      await store.tickets.save(ticket)
+
+      const res = await request(app)
+        .post(`/api/tickets/${ticket.id}/approve`)
+        .set('Authorization', `Bearer ${requestingHeadToken}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.ticket.status).toBe('closed')
+      expect(res.body.ticket.rating).toBe(4)
+    })
+
+    it.each([
+      ['requester', 'requesterToken'],
+      ['other staff', 'otherStaffToken'],
+      ['receiving head', 'headItToken'],
+      ['admin', 'adminToken'],
+    ] as const)('should_return_403_when_%s_tries_to_approve', async (_label, tokenKey) => {
+      const context = await setup()
+      const ticket = pendingTicket()
+      await context.store.tickets.save(ticket)
+
+      const res = await request(context.app)
+        .post(`/api/tickets/${ticket.id}/approve`)
+        .set('Authorization', `Bearer ${context[tokenKey]}`)
+
+      expect(res.status).toBe(403)
+      const unchanged = await context.store.tickets.findById(ticket.id)
+      expect(unchanged?.status).toBe('pending_approval')
+    })
+
+    it('should_return_400_when_ticket_is_not_pending_approval', async () => {
+      const { app, store, requestingHeadToken } = await setup()
+      const ticket: Ticket = { ...pendingTicket(), status: 'resolved' }
+      await store.tickets.save(ticket)
+
+      const res = await request(app)
+        .post(`/api/tickets/${ticket.id}/approve`)
+        .set('Authorization', `Bearer ${requestingHeadToken}`)
+
+      expect(res.status).toBe(400)
+    })
+
+    it('should_return_to_in_progress_and_clear_rating_when_head_rejects_with_reason', async () => {
+      const { app, store, requestingHeadToken } = await setup()
+      const ticket = pendingTicket()
+      await store.tickets.save(ticket)
+
+      const res = await request(app)
+        .post(`/api/tickets/${ticket.id}/reject-approval`)
+        .set('Authorization', `Bearer ${requestingHeadToken}`)
+        .send({ reason: 'Chưa đủ quyền ghi' })
+
+      expect(res.status).toBe(200)
+      expect(res.body.ticket.status).toBe('in_progress')
+      expect(res.body.ticket.rating).toBeUndefined()
+      expect(res.body.ticket.assigneeName).toBe('Hoàng Gia Huy')
+    })
+
+    it('should_return_400_when_head_rejects_without_reason', async () => {
+      const { app, store, requestingHeadToken } = await setup()
+      const ticket = pendingTicket()
+      await store.tickets.save(ticket)
+
+      const res = await request(app)
+        .post(`/api/tickets/${ticket.id}/reject-approval`)
+        .set('Authorization', `Bearer ${requestingHeadToken}`)
+        .send({ reason: '   ' })
+
+      expect(res.status).toBe(400)
+    })
+
+    it('should_return_403_when_non_head_rejects_approval', async () => {
+      const { app, store, requesterToken } = await setup()
+      const ticket = pendingTicket()
+      await store.tickets.save(ticket)
+
+      const res = await request(app)
+        .post(`/api/tickets/${ticket.id}/reject-approval`)
+        .set('Authorization', `Bearer ${requesterToken}`)
+        .send({ reason: 'Tự từ chối' })
+
+      expect(res.status).toBe(403)
+    })
+
+    it('should_reject_direct_status_change_to_pending_approval', async () => {
+      const { app, store } = await setup()
+      const ticket: Ticket = { ...pendingTicket(), status: 'in_progress', rating: undefined }
+      await store.tickets.save(ticket)
+      const specialistLogin = await request(app)
+        .post('/api/auth/login')
+        .send({ username: 'giahuy', password: 'ticket123' })
+
+      const res = await request(app)
+        .patch(`/api/tickets/${ticket.id}/status`)
+        .set('Authorization', `Bearer ${specialistLogin.body.token}`)
+        .send({ status: 'pending_approval' })
+
+      expect(res.status).toBe(400)
+    })
   })
 })

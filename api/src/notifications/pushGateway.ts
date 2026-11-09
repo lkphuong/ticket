@@ -55,36 +55,94 @@ export class MockPushGateway implements IPushGateway {
   }
 }
 
+// Subset of the Firebase Admin messaging API used for multicast delivery
+export interface FcmMulticastSender {
+  sendEachForMulticast(message: {
+    tokens: string[]
+    notification: { title: string; body: string }
+    data?: Record<string, string>
+    webpush?: { fcmOptions?: { link?: string } }
+  }): Promise<{ responses: Array<{ success: boolean; error?: { code?: string } }> }>
+}
+
+export interface FirebaseCredentials {
+  readonly projectId: string
+  readonly clientEmail: string
+  readonly privateKey: string
+}
+
+export type FcmSenderFactory = (credentials: FirebaseCredentials) => FcmMulticastSender
+
+// Error codes meaning the registration token will never be deliverable again
+const INVALID_TOKEN_ERROR_CODES = new Set([
+  'messaging/registration-token-not-registered',
+  'messaging/invalid-registration-token',
+])
+
+// Builds the production sender backed by firebase-admin, imported lazily so unconfigured environments never load it
+const createAdminSender: FcmSenderFactory = (credentials) => {
+  let sender: Promise<FcmMulticastSender> | undefined
+  const resolve = (): Promise<FcmMulticastSender> => {
+    sender ??= (async () => {
+      const [{ cert, getApps, initializeApp }, { getMessaging }] = await Promise.all([
+        import('firebase-admin/app'),
+        import('firebase-admin/messaging'),
+      ])
+      const app = getApps()[0] ?? initializeApp({ credential: cert(credentials) })
+      return getMessaging(app)
+    })()
+    return sender
+  }
+  return { sendEachForMulticast: async (message) => (await resolve()).sendEachForMulticast(message) }
+}
+
 // Firebase Cloud Messaging delivery gateway utilizing service credentials from environment
 export class FirebasePushGateway implements IPushGateway {
-  private readonly projectId?: string
-  private readonly clientEmail?: string
-  private readonly privateKey?: string
+  private readonly credentials?: FirebaseCredentials
+  private readonly sender?: FcmMulticastSender
 
-  constructor(env: Record<string, string | undefined> = process.env) {
+  constructor(
+    env: Record<string, string | undefined> = process.env,
+    createSender: FcmSenderFactory = createAdminSender,
+  ) {
     // Read credentials strictly from environment variables without hardcoded defaults
-    this.projectId = env.FIREBASE_PROJECT_ID
-    this.clientEmail = env.FIREBASE_CLIENT_EMAIL
-    this.privateKey = env.FIREBASE_PRIVATE_KEY
+    const projectId = env.FIREBASE_PROJECT_ID?.trim()
+    const clientEmail = env.FIREBASE_CLIENT_EMAIL?.trim()
+    // Environment files store the key on one line with escaped newlines
+    const privateKey = env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+    if (projectId && clientEmail && privateKey) {
+      this.credentials = { projectId, clientEmail, privateKey }
+      this.sender = createSender(this.credentials)
+    }
   }
 
-  // Safely delivers multicast push messages or logs gracefully when unconfigured
-  async sendToDevices(tokens: string[], _payload: PushMessagePayload): Promise<PushSendResult> {
+  // Delivers a multicast push message, or skips silently when Firebase is not configured
+  async sendToDevices(tokens: string[], payload: PushMessagePayload): Promise<PushSendResult> {
     if (tokens.length === 0) {
       return { successCount: 0, failureCount: 0, invalidTokens: [] }
     }
 
     // In environments lacking Firebase credentials, skip real network delivery safely
-    if (!this.projectId || !this.clientEmail || !this.privateKey) {
-      return { successCount: tokens.length, failureCount: 0, invalidTokens: [] }
+    if (!this.sender || !this.credentials) {
+      return { successCount: 0, failureCount: 0, invalidTokens: [] }
     }
 
     try {
-      // Production Firebase FCM HTTP v1 dispatch routine
-      return { successCount: tokens.length, failureCount: 0, invalidTokens: [] }
+      const batch = await this.sender.sendEachForMulticast({
+        tokens,
+        notification: { title: payload.title, body: payload.body },
+        data: payload.data,
+        webpush: payload.data?.ticketId ? { fcmOptions: { link: `/tickets/${payload.data.ticketId}` } } : undefined,
+      })
+      const invalidTokens = tokens.filter((_, index) => {
+        const code = batch.responses[index]?.error?.code
+        return code !== undefined && INVALID_TOKEN_ERROR_CODES.has(code)
+      })
+      const successCount = batch.responses.filter((response) => response.success).length
+      return { successCount, failureCount: tokens.length - successCount, invalidTokens }
     } catch (err: unknown) {
       // Redact and contextually log errors without disclosing cryptographic key material
-      console.error('[FirebasePushGateway] Multicast dispatch failed for project:', this.projectId, {
+      console.error('[FirebasePushGateway] Multicast dispatch failed for project:', this.credentials.projectId, {
         tokenCount: tokens.length,
         errorMessage: err instanceof Error ? err.message : String(err),
       })

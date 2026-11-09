@@ -34,12 +34,13 @@ function comment(author: string): TicketComment {
 }
 
 describe('ticket lifecycle', () => {
-  it('should_close_ticket_when_happy_path_runs_from_creation_to_confirmation', () => {
+  it('should_close_ticket_when_happy_path_runs_from_creation_to_head_approval', () => {
     const ticket = run(
       makeTicket(),
       { type: 'assignee_set', ticketId: 'TCK-1', assigneeName: 'Hà', changedAt: at },
       { type: 'status_changed', ticketId: 'TCK-1', status: 'resolved', changedAt: at },
       { type: 'result_confirmed', ticketId: 'TCK-1', rating: 5, changedAt: at },
+      { type: 'result_approved', ticketId: 'TCK-1', changedAt: at },
     )
     expect(ticket.status).toBe('closed')
     expect(ticket.rating).toBe(5)

@@ -32,6 +32,12 @@ describe('ticket lifecycle contract tests against API', () => {
       .send({ username: 'vankhoa', password: 'ticket123' })
     const headToken = headRes.body.token
 
+    // Requesting Head: quocbao (Trưởng phòng - Kinh doanh)
+    const requestingHeadRes = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'quocbao', password: 'ticket123' })
+    const requestingHeadToken = requestingHeadRes.body.token
+
     // Primary Handler: giahuy (Chuyên viên - CNTT)
     const handlerRes = await request(app)
       .post('/api/auth/login')
@@ -72,6 +78,7 @@ describe('ticket lifecycle contract tests against API', () => {
       app,
       store,
       requesterToken,
+      requestingHeadToken,
       headToken,
       handlerToken,
       secondHandlerToken,
@@ -80,8 +87,8 @@ describe('ticket lifecycle contract tests against API', () => {
     }
   }
 
-  it('should_close_ticket_when_happy_path_runs_from_creation_to_confirmation', async () => {
-    const { app, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
+  it('should_close_ticket_when_happy_path_runs_from_creation_to_head_approval', async () => {
+    const { app, requestingHeadToken, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
     const ticket = await createSampleTicket()
 
     // 1. Assign to specialist by receiving department head
@@ -111,8 +118,16 @@ describe('ticket lifecycle contract tests against API', () => {
       .set('Authorization', `Bearer ${requesterToken}`)
       .send({ rating: 5, feedback: 'Xử lý rất nhanh và tận tình' })
     expect(confirmRes.status).toBe(200)
-    expect(confirmRes.body.ticket.status).toBe('closed')
+    expect(confirmRes.body.ticket.status).toBe('pending_approval')
     expect(confirmRes.body.ticket.rating).toBe(5)
+
+    // 5. Requesting department head approves, which closes the ticket
+    const approveRes = await request(app)
+      .post(`/api/tickets/${ticket.id}/approve`)
+      .set('Authorization', `Bearer ${requestingHeadToken}`)
+    expect(approveRes.status).toBe(200)
+    expect(approveRes.body.ticket.status).toBe('closed')
+    expect(approveRes.body.ticket.rating).toBe(5)
   })
 
   it('should_reject_disallowed_status_transitions_and_explain_in_vietnamese', async () => {
@@ -154,13 +169,14 @@ describe('ticket lifecycle contract tests against API', () => {
   })
 
   it('should_reject_cancel_when_ticket_is_already_closed', async () => {
-    const { app, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
+    const { app, requestingHeadToken, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
     const ticket = await createSampleTicket()
 
     await request(app).patch(`/api/tickets/${ticket.id}/assign`).set('Authorization', `Bearer ${headToken}`).send({ assigneeName: 'Hoàng Gia Huy' })
     await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'in_progress' })
     await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'resolved' })
     await request(app).post(`/api/tickets/${ticket.id}/confirm`).set('Authorization', `Bearer ${requesterToken}`).send({ rating: 4 })
+    await request(app).post(`/api/tickets/${ticket.id}/approve`).set('Authorization', `Bearer ${requestingHeadToken}`)
 
     const res = await request(app)
       .post(`/api/tickets/${ticket.id}/cancel`)
@@ -203,13 +219,14 @@ describe('ticket lifecycle contract tests against API', () => {
   })
 
   it('should_reject_assignment_when_ticket_is_closed', async () => {
-    const { app, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
+    const { app, requestingHeadToken, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
     const ticket = await createSampleTicket()
 
     await request(app).patch(`/api/tickets/${ticket.id}/assign`).set('Authorization', `Bearer ${headToken}`).send({ assigneeName: 'Hoàng Gia Huy' })
     await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'in_progress' })
     await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'resolved' })
     await request(app).post(`/api/tickets/${ticket.id}/confirm`).set('Authorization', `Bearer ${requesterToken}`).send({ rating: 5 })
+    await request(app).post(`/api/tickets/${ticket.id}/approve`).set('Authorization', `Bearer ${requestingHeadToken}`)
 
     const res = await request(app)
       .patch(`/api/tickets/${ticket.id}/assign`)
@@ -239,13 +256,14 @@ describe('ticket lifecycle contract tests against API', () => {
   })
 
   it('should_clear_rating_and_feedback_when_closed_ticket_is_reopened', async () => {
-    const { app, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
+    const { app, requestingHeadToken, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
     const ticket = await createSampleTicket()
 
     await request(app).patch(`/api/tickets/${ticket.id}/assign`).set('Authorization', `Bearer ${headToken}`).send({ assigneeName: 'Hoàng Gia Huy' })
     await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'in_progress' })
     await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'resolved' })
     await request(app).post(`/api/tickets/${ticket.id}/confirm`).set('Authorization', `Bearer ${requesterToken}`).send({ rating: 4, feedback: 'Tạm ổn' })
+    await request(app).post(`/api/tickets/${ticket.id}/approve`).set('Authorization', `Bearer ${requestingHeadToken}`)
 
     const reopenRes = await request(app)
       .post(`/api/tickets/${ticket.id}/reopen`)
@@ -258,7 +276,7 @@ describe('ticket lifecycle contract tests against API', () => {
   })
 
   it('should_reject_reopen_when_reason_is_blank_or_ticket_is_active', async () => {
-    const { app, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
+    const { app, requestingHeadToken, headToken, handlerToken, requesterToken, createSampleTicket } = await setup()
     const ticket = await createSampleTicket()
 
     await request(app).patch(`/api/tickets/${ticket.id}/assign`).set('Authorization', `Bearer ${headToken}`).send({ assigneeName: 'Hoàng Gia Huy' })
@@ -274,6 +292,7 @@ describe('ticket lifecycle contract tests against API', () => {
     // Close ticket first
     await request(app).patch(`/api/tickets/${ticket.id}/status`).set('Authorization', `Bearer ${handlerToken}`).send({ status: 'resolved' })
     await request(app).post(`/api/tickets/${ticket.id}/confirm`).set('Authorization', `Bearer ${requesterToken}`).send({ rating: 5 })
+    await request(app).post(`/api/tickets/${ticket.id}/approve`).set('Authorization', `Bearer ${requestingHeadToken}`)
 
     // Blank reason rejected
     const blankReopenRes = await request(app)

@@ -1,37 +1,57 @@
 # VTDesk API
 
-Express API backed by PostgreSQL through Drizzle ORM, run with Bun.
+Express API backed by MongoDB, executed with Bun.
 
 ## Setup
 
 1. Install dependencies from the repository root: `bun install`.
-2. Copy `api/.env.example` to `api/.env` and fill in `DATABASE_URL` (and `PORT` or `NODE_ENV` when needed). The `.env` file is git-ignored.
-3. If the database already holds tables from an older schema, run `bun run db:drop` (lists the tables, asks you to type DROP).
-4. Apply migrations: `bun run db:migrate` (from `api/` or the repository root) (the server also applies them on startup).
-5. Load demo data: `bun run db:seed`.
-6. Start the API: `bun run dev` (default port 3001; the web dev server proxies `/api` to it).
+2. Copy `api/.env.example` to `api/.env` and configure `MONGODB_URI` and `MONGODB_DB_NAME` (along with `PORT` and `NODE_ENV` when necessary). The `.env` file is git-ignored. `RESEND_API_KEY`, `RESEND_FROM_EMAIL` and `OTP_HMAC_SECRET` are required in production (the API refuses to start without them); in development, codes are logged or recorded instead of emailed and hashed with a per-process random secret. Uploaded ticket attachments are written to `UPLOAD_DIR` (default `./uploads`, git-ignored); point it at a persistent volume in deployed environments.
+3. If the database already holds older collections, run `bun run db:drop` (lists collections, requires typing DROP).
+4. Apply index schema initialization: `bun run db:migrate` (from `api/` or the repository root; the server also ensures indexes automatically on startup).
+5. Load demo master data: `bun run db:seed`.
+6. Start the API server: `bun run dev` (default port 3001; the web dev server proxies `/api` requests to it).
 
-## Identifiers
+## Collection Design & Identifiers
 
-- Every table uses a `uuid` primary key (generated with `gen_random_uuid()`); departments and default SLAs keep their natural keys.
-- Tickets also carry a human readable `code` shown in screens, CSV and notifications: `TCK-{department prefix}-{YYMM}-{sequence}`, e.g. `TCK-CNTT-2611-001`.
-- The prefix is stored in `departments.code_prefix` and defaults to the department initials when an administrator creates a department.
-- The sequence restarts at `001` each month per receiving department and is allocated atomically from `ticket_code_counters`.
-- The migrations were rewritten into a single `0000_init.sql`. A database created from an older version must be dropped and migrated again.
+- **Document Identifiers**: Primary entities use UUID string identifiers for `_id`; natural keys are preserved where appropriate (such as department name and SLA priority).
+- **Human-Readable Ticket Codes**: Tickets carry an allocated code: `TCK-{department prefix}-{YYMM}-{sequence}`, e.g., `TCK-CNTT-2611-001`.
+- **Atomic Code Counters**: Counter state per department prefix and month period is maintained in `ticket_code_counters`, incremented atomically via MongoDB `findOneAndUpdate`.
+- **Embedded Subdocuments**: Unlike relational normalization, ticket attachments, discussion comments, status change history, and assignment history are embedded directly within the parent `tickets` document. This enables atomic document writes and single-query O(1) retrievals without multi-table joins.
+- **Referential Integrity & Cascading**: When departments are updated or renamed, the repository layer automatically cascades the name modification across `members`, `tickets`, and `request_templates` collections.
 
-## Demo data
+## Embedded Limits
 
-`bun run db:seed` seeds departments, members, request templates, default SLAs and sample tickets.
+Comments (500) and combined status and assignment history entries (1000) are capped per ticket. Exceeding a cap returns HTTP 422 with error `TicketLimitExceeded`.
 
-- It is idempotent: rows that already exist are never overwritten, so re-running it keeps live data.
-- `bun run db:seed -- --reset` clears every application table first. It asks for a typed confirmation, or accepts `--yes` for scripts.
-- It refuses to run when `NODE_ENV=production`.
-- Every seeded account, including `admin`, uses the demo password `ticket123`. Change it before exposing the database.
+## Email Verification
+
+Registration emails a 6 digit code valid for 10 minutes, stored only as an HMAC-SHA256 hash on the member. Five wrong attempts invalidate the code (HTTP 423); an expired code returns 410; resending is limited to once per 60 seconds (HTTP 429 with `retryAfterSeconds` and a `Retry-After` header). Any well-formed email domain is accepted.
+
+## Collections
+
+- `tickets`: Ticket aggregate roots with embedded attachments, comments, status transitions, and assignment history.
+- `members`: Staff and administrator profiles, credentials, department links, and notification settings.
+- `departments`: Organization divisions and prefix codes for ticket code generation.
+- `request_templates`: Predefined ticket request forms configured per department.
+- `default_slas`: Standard response and resolution hour thresholds by priority tier.
+- `notifications`: Personal notification records for workflow events and read indicators.
+- `audit_logs`: Administrative event trail recording security and configuration modifications.
+- `device_tokens`: Push notification registration tokens for web and mobile devices.
+- `ticket_code_counters`: Sequence counters per department and monthly billing cycle.
+
+## Demo Data
+
+`bun run db:seed` seeds departments, members, request templates, default SLAs, and sample tickets.
+
+- It is idempotent: documents that already exist are never duplicated, preserving operational data.
+- `bun run db:seed -- --reset` removes existing documents from application collections first after typed confirmation (or accepts `--yes` for automation).
+- Seeding is rejected when `NODE_ENV=production`.
+- Every seeded account, including `admin`, uses the initial password `ticket123`.
 
 ## Tests
 
-`bun test` from the repository root. Tests use in-memory stores and PGlite, never the real database.
+`bun test` from the repository root. Tests utilize isolated in-memory stores and MongoMemoryServer instances without requiring an external database cluster.
 
-## Deploy
+## Deployment
 
-Provide `DATABASE_URL`, `NODE_ENV` and `PORT` as environment variables, then run `bun run start`. Never seed a production database.
+Supply `MONGODB_URI`, `MONGODB_DB_NAME`, `NODE_ENV`, `PORT`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL` and `OTP_HMAC_SECRET` and `UPLOAD_DIR` environment variables, then execute `bun run start`.

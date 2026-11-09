@@ -20,6 +20,10 @@ function endOfDueDate(dueDate: string): number {
   return new Date(`${dueDate}T23:59:59.999Z`).getTime()
 }
 
+function isFinished(ticket: Ticket): boolean {
+  return ticket.status === 'closed' || ticket.status === 'resolved' || ticket.status === 'pending_approval'
+}
+
 // Work is complete when it was resolved; tickets closed without a recorded resolution use the closing moment
 export function getCompletedAt(ticket: Ticket): string | undefined {
   const history = ticket.statusHistory ?? []
@@ -27,7 +31,7 @@ export function getCompletedAt(ticket: Ticket): string | undefined {
   const closed = history.findLast((change) => change.status === 'closed')
   const recorded = resolved ?? closed
   if (recorded) return recorded.at
-  return ticket.status === 'resolved' || ticket.status === 'closed' ? ticket.updatedAt : undefined
+  return isFinished(ticket) ? ticket.updatedAt : undefined
 }
 
 function isFinishedLate(ticket: Ticket): boolean {
@@ -39,7 +43,7 @@ function isFinishedLate(ticket: Ticket): boolean {
 // Whether the ticket broke its deadline: still open past due, or finished after it. Cancelled tickets deliver nothing.
 export function hasMissedSla(ticket: Ticket, now: Date): boolean {
   if (ticket.cancelReason) return false
-  if (ticket.status === 'closed' || ticket.status === 'resolved') return isFinishedLate(ticket)
+  if (isFinished(ticket)) return isFinishedLate(ticket)
   return calculateTicketSla(ticket, now).isOverdue
 }
 
@@ -56,7 +60,7 @@ export function calculateTicketSla(ticket: Ticket, now: Date): TicketSlaInfo {
     }
   }
 
-  if (ticket.status === 'closed' || ticket.status === 'resolved') {
+  if (isFinished(ticket)) {
     return {
       urgency: 'completed',
       label: isFinishedLate(ticket) ? 'Hoàn tất trễ hạn' : 'Đã hoàn tất',

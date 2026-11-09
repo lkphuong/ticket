@@ -1,6 +1,7 @@
 // Aggregation service computing operational metrics and cross-department performance reports
 
 import {
+  DEFAULT_TICKET_FILTERS,
   buildDepartmentReport,
   calculateAverageRating,
   calculateSlaComplianceRate,
@@ -8,7 +9,6 @@ import {
   countByStatus,
   countOverdue,
   filterTickets,
-  filterVisibleTickets,
   isActiveTicket,
   workloadByDepartment,
 } from '@vtdesk/domain'
@@ -81,9 +81,8 @@ export class ReportService {
       }
     }
 
-    // 2. Fetch all tickets and enforce viewer visibility boundaries
-    const allTickets = await this.store.tickets.findAll()
-    const visibleTickets = filterVisibleTickets(allTickets, viewer)
+    // 2. Fetch only the tickets inside the viewer visibility boundary
+    const visibleTickets = await this.store.tickets.findMatching({ viewer, filters: DEFAULT_TICKET_FILTERS, now })
 
     // 3. Resolve target department scope
     let scopedTickets = visibleTickets
@@ -162,8 +161,7 @@ export class ReportService {
     }
 
     const now = this.clock()
-    const allTickets = await this.store.tickets.findAll()
-    const visibleTickets = filterVisibleTickets(allTickets, viewer)
+    const visibleTickets = await this.store.tickets.findMatching({ viewer, filters: DEFAULT_TICKET_FILTERS, now })
 
     const departmentReport = buildDepartmentReport(visibleTickets, now)
     const workload = workloadByDepartment(visibleTickets)

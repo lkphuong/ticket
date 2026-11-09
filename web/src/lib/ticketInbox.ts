@@ -1,7 +1,7 @@
 import { isActiveTicket } from '../domain/ticket.ts'
 import type { Ticket, Viewer } from '../domain/ticket.ts'
 
-export type InboxReason = 'assign' | 'work' | 'reply' | 'confirm'
+export type InboxReason = 'assign' | 'work' | 'reply' | 'confirm' | 'approve'
 
 export interface InboxGroup {
   reason: InboxReason
@@ -14,6 +14,12 @@ const INBOX_RULES: { reason: InboxReason; label: string; matches: (ticket: Ticke
     reason: 'confirm',
     label: 'Xác nhận kết quả',
     matches: (ticket, viewer) => ticket.requesterName === viewer.name && ticket.status === 'resolved',
+  },
+  {
+    reason: 'approve',
+    label: 'Duyệt nghiệm thu',
+    matches: (ticket, viewer) =>
+      viewer.isDepartmentHead && ticket.fromDepartment === viewer.department && ticket.status === 'pending_approval',
   },
   {
     reason: 'reply',

@@ -1,22 +1,38 @@
-import { describe, expect, it } from 'bun:test'
-import { PGlite } from '@electric-sql/pglite'
-import { drizzle } from 'drizzle-orm/pglite'
-import { PostgresTicketStore } from '../repositories/postgresTicketStore.ts'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { MongoMemoryServer } from 'mongodb-memory-server'
+import { MongoClient, type Db } from 'mongodb'
+import { MongoTicketStore } from '../repositories/mongoTicketStore.ts'
 import { runMigrations } from './migrator.ts'
 import { resetDatabase } from './resetDatabase.ts'
 import { seedDatabase } from './seed.ts'
 
 const SEED_TIME = new Date('2026-11-05T12:00:00Z')
 
-async function createMigratedStore() {
-  const client = new PGlite()
-  await runMigrations(client)
-  return { client, store: new PostgresTicketStore(drizzle(client)) }
+let mongod: MongoMemoryServer
+let client: MongoClient
+let db: Db
+
+beforeAll(async () => {
+  mongod = await MongoMemoryServer.create()
+  client = new MongoClient(mongod.getUri())
+  await client.connect()
+  db = client.db('test_idempotency')
+  await runMigrations(db)
+})
+
+afterAll(async () => {
+  await client.close()
+  await mongod.stop()
+})
+
+async function createFreshStore() {
+  await resetDatabase(db)
+  return new MongoTicketStore(db)
 }
 
-describe('seedDatabase on postgres', () => {
+describe('seedDatabase on MongoDB', () => {
   it('should_not_duplicate_rows_when_seed_runs_twice', async () => {
-    const { store } = await createMigratedStore()
+    const store = await createFreshStore()
     await seedDatabase(store, SEED_TIME)
     const first = { tickets: (await store.tickets.findAll()).length, members: (await store.members.findAll()).length }
 
@@ -26,7 +42,7 @@ describe('seedDatabase on postgres', () => {
   })
 
   it('should_keep_existing_changes_when_seed_runs_again', async () => {
-    const { store } = await createMigratedStore()
+    const store = await createFreshStore()
     await seedDatabase(store, SEED_TIME)
     const member = await store.members.findByUsername('minhanh')
     await store.members.save({ ...member!, name: 'Da doi ten' })
@@ -36,18 +52,18 @@ describe('seedDatabase on postgres', () => {
   })
 
   it('should_remove_all_rows_when_database_is_reset', async () => {
-    const { client, store } = await createMigratedStore()
+    const store = await createFreshStore()
     await seedDatabase(store, SEED_TIME)
 
-    await resetDatabase({ exec: (sql) => client.exec(sql) })
+    await resetDatabase(db)
     expect(await store.tickets.findAll()).toHaveLength(0)
     expect(await store.members.findAll()).toHaveLength(0)
   })
 })
 
-describe('ticket code allocation on postgres', () => {
+describe('ticket code allocation on MongoDB', () => {
   it('should_continue_after_seeded_codes_and_never_repeat_when_allocating_concurrently', async () => {
-    const { store } = await createMigratedStore()
+    const store = await createFreshStore()
     await seedDatabase(store, SEED_TIME)
     const existingCodes = new Set((await store.tickets.findAll()).map((ticket) => ticket.code))
 
@@ -61,7 +77,7 @@ describe('ticket code allocation on postgres', () => {
   })
 
   it('should_restart_sequence_when_month_changes', async () => {
-    const { store } = await createMigratedStore()
+    const store = await createFreshStore()
     expect(await store.tickets.allocateCode('KD', new Date('2026-11-30T10:00:00Z'))).toBe('TCK-KD-2611-001')
     expect(await store.tickets.allocateCode('KD', new Date('2026-12-01T10:00:00Z'))).toBe('TCK-KD-2612-001')
   })
@@ -69,7 +85,7 @@ describe('ticket code allocation on postgres', () => {
 
 describe('seeded identifiers', () => {
   it('should_use_uuid_primary_keys_when_seeding_members_templates_and_tickets', async () => {
-    const { store } = await createMigratedStore()
+    const store = await createFreshStore()
     await seedDatabase(store, SEED_TIME)
     const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 

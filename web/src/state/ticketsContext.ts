@@ -12,6 +12,8 @@ export interface TicketsContextValue {
   changeStatus: (ticketId: string, status: TicketStatus, reason?: string) => Promise<string | null>
   assignTicket: (ticketId: string, assigneeName: string) => Promise<string | null>
   confirmResult: (ticketId: string, rating: number, feedback?: string) => Promise<string | null>
+  approveResult: (ticketId: string) => Promise<string | null>
+  rejectApproval: (ticketId: string, reason: string) => Promise<string | null>
   addComment: (ticketId: string, body: string, attachments?: TicketAttachment[]) => Promise<string | null>
   changePriority: (ticketId: string, priority: TicketPriority) => Promise<string | null>
   changeDueDate: (ticketId: string, dueDate: string) => Promise<string | null>

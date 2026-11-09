@@ -156,7 +156,7 @@ describe('Ticket Detail & Timeline API', () => {
 
     // Validate timeline stages
     const timeline = res.body.timeline
-    expect(timeline.length).toBe(5) // STAGES: Mới, Đã tiếp nhận, Đang xử lý, Hoàn thành, Nghiệm thu
+    expect(timeline.length).toBe(6) // STAGES: Mới, Đã tiếp nhận, Đang xử lý, Hoàn thành, Chờ duyệt, Nghiệm thu
     expect(timeline[0].state).toBe('done')
     expect(timeline[2].state).toBe('current') // in_progress stage
     expect(timeline[3].state).toBe('upcoming')

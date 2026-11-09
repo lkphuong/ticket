@@ -36,6 +36,12 @@ describe('In-App Notifications API & Domain Event Dispatching', () => {
       .send({ username: 'minhanh', password: 'ticket123' })
     const requesterToken = requesterLogin.body.token
 
+    // Authenticate Head of Kinh doanh (quocbao), the requesting department head
+    const requestingHeadLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'quocbao', password: 'ticket123' })
+    const requestingHeadToken = requestingHeadLogin.body.token
+
     return {
       app,
       store,
@@ -44,11 +50,12 @@ describe('In-App Notifications API & Domain Event Dispatching', () => {
       headItToken,
       specialistToken,
       requesterToken,
+      requestingHeadToken,
     }
   }
 
   it('should_dispatch_notifications_to_exact_recipients_across_full_ticket_lifecycle', async () => {
-    const { app, headItToken, specialistToken, requesterToken } = await setup()
+    const { app, headItToken, specialistToken, requesterToken, requestingHeadToken } = await setup()
 
     // 1. Event: ticket_created (by minhanh in Kinh doanh -> sent to CNTT)
     const createRes = await request(app)
@@ -149,16 +156,32 @@ describe('In-App Notifications API & Domain Event Dispatching', () => {
       .send({ rating: 5, feedback: 'Dịch vụ hoàn hảo' })
     expect(confirmRes.status).toBe(200)
 
-    // Both specialist and receiving head receive confirmation notification
+    // Only the requesting department head is asked to approve; the receiving side is told after approval
+    const requestingHeadNotifRes = await request(app)
+      .get('/api/notifications')
+      .set('Authorization', `Bearer ${requestingHeadToken}`)
+    expect(requestingHeadNotifRes.body.notifications.some((n: any) => n.type === 'result_confirmed')).toBe(true)
+
     const specNotifRes3 = await request(app)
       .get('/api/notifications')
       .set('Authorization', `Bearer ${specialistToken}`)
-    expect(specNotifRes3.body.notifications.some((n: any) => n.type === 'result_confirmed')).toBe(true)
+    expect(specNotifRes3.body.notifications.some((n: any) => n.type === 'result_confirmed')).toBe(false)
 
-    const headNotifRes3 = await request(app)
+    // 7. Event: result_approved (requesting head approves)
+    const approveRes = await request(app)
+      .post(`/api/tickets/${ticketId}/approve`)
+      .set('Authorization', `Bearer ${requestingHeadToken}`)
+    expect(approveRes.status).toBe(200)
+
+    const specNotifRes4 = await request(app)
+      .get('/api/notifications')
+      .set('Authorization', `Bearer ${specialistToken}`)
+    expect(specNotifRes4.body.notifications.some((n: any) => n.type === 'result_approved')).toBe(true)
+
+    const headNotifRes4 = await request(app)
       .get('/api/notifications')
       .set('Authorization', `Bearer ${headItToken}`)
-    expect(headNotifRes3.body.notifications.some((n: any) => n.type === 'result_confirmed')).toBe(true)
+    expect(headNotifRes4.body.notifications.some((n: any) => n.type === 'result_approved')).toBe(true)
   })
 
   it('should_enforce_user_isolation_so_users_only_view_their_own_notifications', async () => {

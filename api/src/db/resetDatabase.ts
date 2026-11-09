@@ -1,24 +1,9 @@
-import type { SqlExecutor } from './migrator.ts'
+import type { Db } from 'mongodb'
+import { COLLECTION_NAMES } from './schema.ts'
 
-// Child tables are cleared by CASCADE from their parents, but listing every table keeps the intent explicit
-const RESETTABLE_TABLES = [
-  'device_tokens',
-  'audit_logs',
-  'notifications',
-  'default_slas',
-  'request_templates',
-  'ticket_assignment_history',
-  'ticket_status_history',
-  'comment_attachments',
-  'ticket_comments',
-  'ticket_attachments',
-  'tickets',
-  'members',
-  'departments',
-] as const
-
-// Removes every row from application tables while keeping the schema and migration history
-export async function resetDatabase(executor: SqlExecutor): Promise<void> {
-  const tableList = RESETTABLE_TABLES.map((table) => `"${table}"`).join(', ')
-  await executor.exec(`TRUNCATE TABLE ${tableList} RESTART IDENTITY CASCADE;`)
+// Clears all documents from application collections while preserving indexes and collection configuration
+export async function resetDatabase(db: Db): Promise<void> {
+  for (const name of Object.values(COLLECTION_NAMES)) {
+    await db.collection(name).deleteMany({})
+  }
 }

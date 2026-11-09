@@ -1,8 +1,41 @@
 import { Router } from 'express'
 import type { Response } from 'express'
 import { CmsService, CmsValidationError } from '../cms/cmsService.ts'
+import type { MemberListFilters } from '../cms/cmsService.ts'
+import { parsePageRequest } from '../cms/pagination.ts'
+import type { DbMember } from '../repositories/interfaces.ts'
 import type { AuthenticatedRequest } from '../middleware/authMiddleware.ts'
 import { requireRoles } from '../middleware/authMiddleware.ts'
+
+const MEMBER_ROLES: readonly DbMember['role'][] = ['staff', 'head', 'admin']
+
+function readMemberFilters(query: Record<string, unknown>): MemberListFilters {
+  const role = MEMBER_ROLES.find((candidate) => candidate === query.role)
+  const status = query.status === 'active' || query.status === 'locked' ? query.status : undefined
+  return {
+    search: typeof query.search === 'string' ? query.search : undefined,
+    department: typeof query.department === 'string' && query.department ? query.department : undefined,
+    role,
+    status,
+  }
+}
+
+// Strips credentials so password hashes never leave the API
+function toMemberResponse(member: DbMember) {
+  return {
+    id: member.id,
+    username: member.username,
+    name: member.name,
+    department: member.department,
+    role: member.role,
+    isDepartmentHead: member.isDepartmentHead,
+    isActive: member.isActive,
+    requiresPasswordChange: member.requiresPasswordChange,
+    email: member.email,
+    createdAt: member.createdAt,
+    updatedAt: member.updatedAt,
+  }
+}
 
 export function createCmsRouter(cmsService: CmsService, authMiddleware: any): Router {
   const router = Router()
@@ -12,9 +45,16 @@ export function createCmsRouter(cmsService: CmsService, authMiddleware: any): Ro
   router.use(requireRoles('admin'))
 
   // Department management
-  router.get('/departments', async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
+  // Plain department names for pickers that need every option rather than a page
+  router.get('/departments/options', async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
     const list = await cmsService.listDepartments()
     res.status(200).json({ departments: list })
+  })
+
+  router.get('/departments', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const search = typeof req.query.search === 'string' ? req.query.search : undefined
+    const page = await cmsService.listDepartmentSummaries(search, parsePageRequest(req.query))
+    res.status(200).json({ departments: page.items, total: page.total, page: page.page, limit: page.limit, totalPages: page.totalPages })
   })
 
   router.post('/departments', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -31,23 +71,41 @@ export function createCmsRouter(cmsService: CmsService, authMiddleware: any): Ro
     }
   })
 
+  router.put('/departments/:name', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      await cmsService.updateDepartment(req.viewer!, req.params.name, req.body ?? {})
+      res.status(200).json({ status: 'ok', message: 'Phòng ban đã được cập nhật.' })
+    } catch (err) {
+      if (err instanceof CmsValidationError) {
+        res.status(400).json({ error: 'ValidationError', message: err.message })
+        return
+      }
+      res.status(500).json({ error: 'InternalError', message: 'Không thể cập nhật phòng ban.' })
+    }
+  })
+
+  router.delete('/departments/:name', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      await cmsService.deleteDepartment(req.viewer!, req.params.name)
+      res.status(200).json({ status: 'ok', message: 'Phòng ban đã được xóa.' })
+    } catch (err) {
+      if (err instanceof CmsValidationError) {
+        res.status(400).json({ error: 'ValidationError', message: err.message })
+        return
+      }
+      res.status(500).json({ error: 'InternalError', message: 'Không thể xóa phòng ban.' })
+    }
+  })
+
   // Member management
-  router.get('/members', async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const members = await cmsService.listMembers()
+  router.get('/members', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const page = await cmsService.listMembersPage(readMemberFilters(req.query), parsePageRequest(req.query))
     res.status(200).json({
-      members: members.map((m) => ({
-        id: m.id,
-        username: m.username,
-        name: m.name,
-        department: m.department,
-        role: m.role,
-        isDepartmentHead: m.isDepartmentHead,
-        isActive: m.isActive,
-        requiresPasswordChange: m.requiresPasswordChange,
-        email: m.email,
-        createdAt: m.createdAt,
-        updatedAt: m.updatedAt,
-      })),
+      members: page.items.map(toMemberResponse),
+      total: page.total,
+      page: page.page,
+      limit: page.limit,
+      totalPages: page.totalPages,
     })
   })
 
@@ -103,6 +161,19 @@ export function createCmsRouter(cmsService: CmsService, authMiddleware: any): Ro
     }
   })
 
+  router.delete('/members/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      await cmsService.deleteMember(req.viewer!, req.params.id)
+      res.status(200).json({ status: 'ok', message: 'Thành viên đã được xóa.' })
+    } catch (err) {
+      if (err instanceof CmsValidationError) {
+        res.status(400).json({ error: 'ValidationError', message: err.message })
+        return
+      }
+      res.status(500).json({ error: 'InternalError', message: 'Không thể xóa thành viên.' })
+    }
+  })
+
   router.post('/members/:id/lock', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const result = await cmsService.lockMember(req.viewer!, req.params.id)
@@ -151,9 +222,9 @@ export function createCmsRouter(cmsService: CmsService, authMiddleware: any): Ro
   })
 
   // Audit logs view
-  router.get('/audit-logs', async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
-    const logs = await cmsService.listAuditLogs()
-    res.status(200).json({ auditLogs: logs })
+  router.get('/audit-logs', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const page = await cmsService.listAuditLogsPage(parsePageRequest(req.query))
+    res.status(200).json({ auditLogs: page.items, total: page.total, page: page.page, limit: page.limit, totalPages: page.totalPages })
   })
 
   // Template management (Admin only)
