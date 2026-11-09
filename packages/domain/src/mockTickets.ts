@@ -409,5 +409,3 @@ function assignCodesAndUuids(drafts: MockTicketDraft[]): Ticket[] {
 
   return rewritten.map((draft, index) => ({ ...draft, code: codeByLegacyKey.get(drafts[index].id) as string }))
 }
-
-export const MOCK_TICKETS: Ticket[] = buildMockTickets(new Date())

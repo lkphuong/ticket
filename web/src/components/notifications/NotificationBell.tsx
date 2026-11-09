@@ -55,27 +55,30 @@ export function NotificationBell() {
   // Detects push support, refreshes the device token when already permitted, and surfaces pushes received while the tab is open
   useEffect(() => {
     let active = true
-    let unsubscribe = () => {}
+    const subscriptions: Array<() => void> = []
     void isPushAvailable().then(async (available) => {
       if (!active || !available) return
       setPushSupported(true)
       if (Notification.permission !== 'granted') return
       try {
         await apiClient.notifications.registerDevice(await requestPushToken())
-        unsubscribe = subscribeToForegroundPush((message) => {
+        const unsubscribe = subscribeToForegroundPush((message) => {
           notify(`${message.title}: ${message.body}`, 'info')
           void apiClient.notifications.list().then((res) => {
             setNotifications(res.notifications)
             setUnreadCount(res.unreadCount)
           })
         })
+        // The component may have unmounted while the token request was pending
+        if (active) subscriptions.push(unsubscribe)
+        else unsubscribe()
       } catch {
         // Push stays optional; the polled feed keeps working
       }
     })
     return () => {
       active = false
-      unsubscribe()
+      subscriptions.forEach((unsubscribe) => unsubscribe())
     }
   }, [notify])
 
