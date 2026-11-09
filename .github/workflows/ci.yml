@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/*, ticket/*]
+    branches: [main, production, feat/*, ticket/*]
   pull_request:
-    branches: [main]
+    branches: [main, production]
 
 jobs:
   validate:
@@ -17,7 +17,7 @@ jobs:
       - name: Setup Bun environment
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.4.2
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
