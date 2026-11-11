@@ -14,7 +14,8 @@
     "build": "bun run --filter '*' build",
     "test": "bun test",
     "lint": "oxlint web/src packages/domain/src api/src",
-    "db:drop": "bun --filter @vtdesk/api db:drop"
+    "db:drop": "bun --filter @vtdesk/api db:drop",
+    "docker": "docker build -f api/Dockerfile -t phuonglk/ticket-api:latest . --platform linux/amd64 && cd web && docker build -t phuonglk/ticket-web:latest . --platform linux/amd64 && docker push phuonglk/ticket-api:latest && docker push phuonglk/ticket-web:latest"
   },
   "devDependencies": {
     "bun-types": "^1.4.4",

@@ -1,0 +1,14 @@
+.git
+.github
+.codegraph
+.scratch
+.worktrees
+docs
+**/node_modules
+**/*.log
+**/.DS_Store
+.env
+.env.*
+!.env.example
+api/uploads
+*firebase-adminsdk*.json

@@ -1,0 +1,46 @@
+services:
+  ticket-api:
+    image: phuonglk/ticket-api:latest
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: 3001
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - uploads-data:/data/uploads
+    networks:
+      - taco-bridge
+
+  ticket-web:
+    image: phuonglk/ticket-web:latest
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:-}
+        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID:-}
+        VITE_FIREBASE_MESSAGING_SENDER_ID: ${VITE_FIREBASE_MESSAGING_SENDER_ID:-}
+        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID:-}
+        VITE_FIREBASE_VAPID_KEY: ${VITE_FIREBASE_VAPID_KEY:-}
+    restart: unless-stopped
+    depends_on:
+      - ticket-api
+    env_file:
+      - .env
+    environment:
+      API_UPSTREAM: http://api:3001
+    ports:
+      - "8181:80"
+    networks:
+      - taco-bridge
+
+volumes:
+  uploads-data:
+
+networks:
+  taco-bridge:
+    external: true
