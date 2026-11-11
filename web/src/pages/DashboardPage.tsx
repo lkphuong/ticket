@@ -17,6 +17,7 @@ import { StatusBreakdown } from '../components/tickets/StatusBreakdown.tsx'
 import { TicketListPanel } from '../components/tickets/TicketListPanel.tsx'
 import { TicketRow } from '../components/tickets/TicketRow.tsx'
 import { WorkloadMosaic } from '../components/tickets/WorkloadMosaic.tsx'
+import { TransferApprovalPanel } from '../components/profile/TransferApprovalPanel.tsx'
 import { useDepartmentDirectory } from '../state/useDepartmentDirectory.ts'
 import { useTickets } from '../state/useTickets.ts'
 import type { Department } from '../domain/ticket.ts'
@@ -181,6 +182,7 @@ export function DashboardPage() {
           <>
             {inboxPanel}
             <div className="flex flex-col gap-6">
+              <TransferApprovalPanel />
               {queuePanel}
               {overduePanel}
             </div>

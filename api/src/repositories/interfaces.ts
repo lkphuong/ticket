@@ -19,7 +19,8 @@ export interface DbMember {
   passwordHash: string
   requiresPasswordChange: boolean
   email?: string
-  receiveEmailNotifications: boolean
+  // Attachment id of the profile picture; the image itself lives in attachment storage
+  avatarAttachmentId?: string
   isVerified?: boolean
   otp?: MemberOtp
   createdAt?: Date
@@ -181,6 +182,33 @@ export interface IDeviceTokenRepository {
   deleteByTokens(tokens: readonly string[]): Promise<void>
 }
 
+export type DepartmentTransferStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
+
+// A member's request to move department, effective only once the head of the current department approves
+export interface DbDepartmentTransfer {
+  id: string
+  memberId: string
+  username: string
+  memberName: string
+  fromDepartment: string
+  toDepartment: string
+  status: DepartmentTransferStatus
+  requestedAt: Date
+  decidedAt?: Date
+  decidedByUsername?: string
+  rejectReason?: string
+}
+
+export interface IDepartmentTransferRepository {
+  findById(id: string): Promise<DbDepartmentTransfer | null>
+  // Returns the member's most recent request regardless of status
+  findLatestByMember(memberId: string): Promise<DbDepartmentTransfer | null>
+  findPendingByMember(memberId: string): Promise<DbDepartmentTransfer | null>
+  // Returns requests waiting for the head of the department the members are leaving, oldest first
+  findPendingByFromDepartment(department: string): Promise<DbDepartmentTransfer[]>
+  save(transfer: DbDepartmentTransfer): Promise<void>
+}
+
 // Unified repository store facade separating domain operations from persistence driver
 export interface ITicketStore {
   tickets: ITicketRepository
@@ -191,4 +219,5 @@ export interface ITicketStore {
   notifications: INotificationRepository
   auditLogs: IAuditLogRepository
   deviceTokens: IDeviceTokenRepository
+  departmentTransfers: IDepartmentTransferRepository
 }

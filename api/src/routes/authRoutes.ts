@@ -8,6 +8,7 @@ import {
   PasswordValidationError,
   ProfileValidationError,
   RegistrationValidationError,
+  toUserProfile,
 } from '../auth/authService.ts'
 import { VerificationError } from '../auth/verificationErrors.ts'
 import type { AuthenticatedRequest } from '../middleware/authMiddleware.ts'
@@ -194,22 +195,10 @@ export function createAuthRouter(
       return
     }
 
-    res.status(200).json({
-      user: {
-        id: member.id,
-        username: member.username,
-        name: member.name,
-        department: member.department,
-        role: member.role,
-        isDepartmentHead: member.isDepartmentHead,
-        requiresPasswordChange: member.requiresPasswordChange,
-        email: member.email,
-        receiveEmailNotifications: member.receiveEmailNotifications ?? false,
-      },
-    })
+    res.status(200).json({ user: toUserProfile(member) })
   })
 
-  // Updates optional email and notification preference
+  // Updates the profile picture, or removes it when avatarAttachmentId is null
   router.patch('/profile', authMiddleware, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       if (!req.viewer?.userId) {
@@ -217,25 +206,13 @@ export function createAuthRouter(
         return
       }
 
-      const { email, receiveEmailNotifications } = req.body ?? {}
-      const updated = await authService.updateProfile(req.viewer.userId, {
-        email,
-        receiveEmailNotifications,
-      })
-
-      res.status(200).json({
-        user: {
-          id: updated.id,
-          username: updated.username,
-          name: updated.name,
-          department: updated.department,
-          role: updated.role,
-          isDepartmentHead: updated.isDepartmentHead,
-          requiresPasswordChange: updated.requiresPasswordChange,
-          email: updated.email,
-          receiveEmailNotifications: updated.receiveEmailNotifications ?? false,
-        },
-      })
+      const { avatarAttachmentId } = req.body ?? {}
+      if (avatarAttachmentId !== null && typeof avatarAttachmentId !== 'string') {
+        res.status(400).json({ error: 'ValidationError', message: 'avatarAttachmentId must be an attachment id or null.' })
+        return
+      }
+      const updated = await authService.updateAvatar(req.viewer.userId, avatarAttachmentId)
+      res.status(200).json({ user: toUserProfile(updated) })
     } catch (err) {
       if (err instanceof ProfileValidationError) {
         res.status(400).json({

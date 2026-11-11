@@ -214,7 +214,6 @@ export class CmsService {
       passwordHash,
       requiresPasswordChange: true,
       email: input.email?.trim().toLowerCase() || undefined,
-      receiveEmailNotifications: false,
     }
 
     await this.store.members.save(newMember)

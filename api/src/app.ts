@@ -7,6 +7,7 @@ import { OtpService } from './auth/otpService.ts'
 import { MemorySessionService } from './auth/sessionService.ts'
 import type { ISessionService } from './auth/sessionService.ts'
 import { CmsService } from './cms/cmsService.ts'
+import { DepartmentTransferService } from './members/departmentTransferService.ts'
 import type { AppConfig } from './config/environment.ts'
 import { createAuthMiddleware } from './middleware/authMiddleware.ts'
 import { createSecurityHeaders } from './middleware/securityHeaders.ts'
@@ -16,6 +17,7 @@ import { createAttachmentRouter } from './routes/attachmentRoutes.ts'
 import { createAuthRouter } from './routes/authRoutes.ts'
 import type { AuthRateLimitOptions } from './routes/authRoutes.ts'
 import { createCmsRouter } from './routes/cmsRoutes.ts'
+import { createDepartmentTransferRouter } from './routes/departmentTransferRoutes.ts'
 import { createMemberDirectoryRouter } from './routes/memberDirectoryRoutes.ts'
 import { createHealthRouter } from './routes/health.ts'
 import { createNotificationRouter } from './routes/notificationRoutes.ts'
@@ -33,6 +35,7 @@ export interface AppDependencies {
   readonly sessionService?: ISessionService
   readonly authService?: AuthService
   readonly cmsService?: CmsService
+  readonly departmentTransferService?: DepartmentTransferService
   readonly pushGateway?: IPushGateway
   readonly emailService?: IEmailService
   readonly notificationService?: NotificationService
@@ -57,20 +60,22 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
       ? new ConsoleEmailService()
       : new MockEmailService()
   const emailService = deps.emailService ?? defaultEmailService
+  const attachmentStorage = deps.attachmentStorage ?? new DiskAttachmentStorage(config.uploadDir)
   const authService = deps.authService ?? new AuthService(
       store.members,
       sessionService,
       store.departments,
       emailService,
       config.otpHmacSecret ? new OtpService(config.otpHmacSecret) : undefined,
+      attachmentStorage,
     )
   const cmsService = deps.cmsService ?? new CmsService(store)
   const pushGateway = deps.pushGateway ?? new FirebasePushGateway()
   const notificationService = deps.notificationService ?? new NotificationService(store, undefined, () => new Date(), pushGateway)
+  const departmentTransferService = deps.departmentTransferService ?? new DepartmentTransferService(store, notificationService)
   const deadlineService = deps.deadlineService ?? new DeadlineService(store, notificationService)
   const reportService = deps.reportService ?? new ReportService(store)
   const ticketService = deps.ticketService ?? new TicketService(store, () => new Date(), notificationService)
-  const attachmentStorage = deps.attachmentStorage ?? new DiskAttachmentStorage(config.uploadDir)
   const authMiddleware = createAuthMiddleware(sessionService, store.members)
 
   app.use(createSecurityHeaders(config.nodeEnv === 'production'))
@@ -101,6 +106,9 @@ export function createApp(config: AppConfig, deps: AppDependencies = {}): Expres
 
   // Member directory for pickers and filters
   app.use('/api/members', createMemberDirectoryRouter(store.members, authMiddleware))
+
+  // Department transfer requests and head approvals
+  app.use('/api/department-transfers', createDepartmentTransferRouter(departmentTransferService, authMiddleware))
 
   // CMS management routing
   app.use('/api/cms', createCmsRouter(cmsService, authMiddleware))

@@ -128,6 +128,7 @@ export interface Viewer {
   isAdmin?: boolean
   isExecutive?: boolean
   requiresPasswordChange?: boolean
+  avatarAttachmentId?: string
 }
 
 export function isActiveTicket(ticket: Ticket): boolean {

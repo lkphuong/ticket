@@ -8,6 +8,8 @@ export interface AppNotification {
   readonly id: string
   readonly recipientUsername: string
   readonly notificationType: string
+  // Event kind written by the API, for example department_transfer_approved
+  readonly type: string
   readonly ticketId?: string | null
   readonly title: string
   readonly body: string
@@ -114,7 +116,21 @@ export interface UserSessionProfile {
   readonly isDepartmentHead: boolean
   readonly requiresPasswordChange: boolean
   readonly email?: string
-  readonly receiveEmailNotifications?: boolean
+  readonly avatarAttachmentId?: string
+}
+
+export type DepartmentTransferStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
+
+export interface DepartmentTransfer {
+  readonly id: string
+  readonly username: string
+  readonly memberName: string
+  readonly fromDepartment: string
+  readonly toDepartment: string
+  readonly status: DepartmentTransferStatus
+  readonly requestedAt: string
+  readonly decidedAt?: string
+  readonly rejectReason?: string
 }
 
 export interface AuthLoginResponse {
@@ -340,10 +356,11 @@ export class ApiClient {
       })
     },
 
-    updateProfile: async (data: { email?: string | null; receiveEmailNotifications?: boolean }): Promise<{ user: UserSessionProfile }> => {
+    // Pass null to remove the current profile picture
+    updateAvatar: async (avatarAttachmentId: string | null): Promise<{ user: UserSessionProfile }> => {
       return this.request<{ user: UserSessionProfile }>('/auth/profile', {
         method: 'PATCH',
-        body: JSON.stringify(data),
+        body: JSON.stringify({ avatarAttachmentId }),
       })
     },
 
@@ -534,6 +551,34 @@ export class ApiClient {
     unregisterDevice: async (token: string): Promise<void> => {
       await this.request(`/notifications/devices/${encodeURIComponent(token)}`, {
         method: 'DELETE',
+      })
+    },
+  }
+
+  readonly departmentTransfers = {
+    // Latest request of the signed-in member, or null when none was ever filed
+    mine: async (): Promise<{ transfer: DepartmentTransfer | null }> => {
+      return this.request('/department-transfers/mine', { method: 'GET' })
+    },
+    request: async (toDepartment: string): Promise<{ transfer: DepartmentTransfer }> => {
+      return this.request('/department-transfers', {
+        method: 'POST',
+        body: JSON.stringify({ toDepartment }),
+      })
+    },
+    cancelMine: async (): Promise<void> => {
+      await this.request('/department-transfers/mine', { method: 'DELETE' })
+    },
+    incoming: async (): Promise<{ transfers: DepartmentTransfer[] }> => {
+      return this.request('/department-transfers/incoming', { method: 'GET' })
+    },
+    approve: async (id: string): Promise<{ transfer: DepartmentTransfer }> => {
+      return this.request(`/department-transfers/${encodeURIComponent(id)}/approve`, { method: 'POST' })
+    },
+    reject: async (id: string, reason: string): Promise<{ transfer: DepartmentTransfer }> => {
+      return this.request(`/department-transfers/${encodeURIComponent(id)}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
       })
     },
   }

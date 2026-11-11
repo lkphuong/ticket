@@ -30,12 +30,13 @@ Registration emails a 6 digit code valid for 10 minutes, stored only as an HMAC-
 ## Collections
 
 - `tickets`: Ticket aggregate roots with embedded attachments, comments, status transitions, and assignment history.
-- `members`: Staff and administrator profiles, credentials, department links, and notification settings.
+- `members`: Staff and administrator profiles, credentials, department links, and the optional avatar attachment id.
 - `departments`: Organization divisions and prefix codes for ticket code generation.
 - `request_templates`: Predefined ticket request forms configured per department.
 - `default_slas`: Standard response and resolution hour thresholds by priority tier.
 - `notifications`: Personal notification records for workflow events and read indicators.
 - `audit_logs`: Administrative event trail recording security and configuration modifications.
+- `department_transfers`: Requests to move to another department, pending until the head of the current department approves or rejects them.
 - `device_tokens`: Push notification registration tokens for web and mobile devices.
 - `ticket_code_counters`: Sequence counters per department and monthly billing cycle.
 

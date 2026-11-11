@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { DEPARTMENTS } from '@vtdesk/domain'
 import type { DbMember, IDepartmentRepository, IMemberRepository } from '../repositories/interfaces.ts'
 import { MockEmailService, type IEmailService } from '../notifications/emailService.ts'
+import type { IAttachmentStorage } from '../attachments/attachmentStorage.ts'
 import { OtpService } from './otpService.ts'
 import type { ISessionService } from './sessionService.ts'
 import {
@@ -17,19 +18,38 @@ const DEV_OTP_SECRET_BYTES = 32
 const MIN_USERNAME_LENGTH = 2
 const MIN_PASSWORD_LENGTH = 6
 
+const AVATAR_MIME_TYPES: readonly string[] = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024
+
+export interface UserProfile {
+  readonly id: string
+  readonly username: string
+  readonly name: string
+  readonly department: string
+  readonly role: 'staff' | 'head' | 'admin'
+  readonly isDepartmentHead: boolean
+  readonly requiresPasswordChange: boolean
+  readonly email?: string
+  readonly avatarAttachmentId?: string
+}
+
 export interface AuthSuccessResult {
   readonly token: string
-  readonly user: {
-    readonly id: string
-    readonly username: string
-    readonly name: string
-    readonly department: string
-    readonly role: 'staff' | 'head' | 'admin'
-    readonly isDepartmentHead: boolean
-    readonly requiresPasswordChange: boolean
-    readonly email?: string
-    readonly receiveEmailNotifications: boolean
-    readonly isVerified?: boolean
+  readonly user: UserProfile
+}
+
+// Projects a member onto the fields a signed-in client may see, leaving credentials behind
+export function toUserProfile(member: DbMember): UserProfile {
+  return {
+    id: member.id,
+    username: member.username,
+    name: member.name,
+    department: member.department,
+    role: member.role,
+    isDepartmentHead: member.isDepartmentHead,
+    requiresPasswordChange: member.requiresPasswordChange,
+    email: member.email,
+    avatarAttachmentId: member.avatarAttachmentId,
   }
 }
 
@@ -75,11 +95,6 @@ export class RegistrationValidationError extends Error {
   }
 }
 
-export interface UpdateProfileInput {
-  readonly email?: string | null
-  readonly receiveEmailNotifications?: boolean
-}
-
 export interface RegisterInput {
   readonly username: string
   readonly name: string
@@ -115,6 +130,7 @@ export class AuthService {
     private readonly departmentRepo?: IDepartmentRepository,
     private readonly emailService: IEmailService = new MockEmailService(),
     private readonly otpService: OtpService = new OtpService(randomBytes(DEV_OTP_SECRET_BYTES).toString('hex')),
+    private readonly attachmentStorage?: IAttachmentStorage,
   ) {}
 
   async login(usernameRaw: string, passwordRaw: string): Promise<AuthSuccessResult> {
@@ -160,20 +176,7 @@ export class AuthService {
       requiresPasswordChange: member.requiresPasswordChange,
     })
 
-    return {
-      token,
-      user: {
-        id: member.id,
-        username: member.username,
-        name: member.name,
-        department: member.department,
-        role: member.role,
-        isDepartmentHead: member.isDepartmentHead,
-        requiresPasswordChange: member.requiresPasswordChange,
-        email: member.email,
-        receiveEmailNotifications: member.receiveEmailNotifications ?? false,
-      },
-    }
+    return { token, user: toUserProfile(member) }
   }
 
   // Retrieves member profile by identifier
@@ -181,42 +184,36 @@ export class AuthService {
     return await this.memberRepo.findById(userId)
   }
 
-  // Updates optional email address and notification subscription preference
-  async updateProfile(userId: string, input: UpdateProfileInput): Promise<DbMember> {
+  // Sets or clears the profile picture; the image must already be uploaded as a small passive image attachment
+  async updateAvatar(userId: string, attachmentId: string | null): Promise<DbMember> {
     const member = await this.memberRepo.findById(userId)
     if (!member) {
       throw new AuthenticationError('User not found.')
     }
 
-    let validatedEmail = member.email
-    let receiveEmail = input.receiveEmailNotifications ?? member.receiveEmailNotifications ?? false
-
-    if (input.email !== undefined) {
-      if (input.email === null || input.email.trim() === '') {
-        validatedEmail = undefined
-        // Reset notification preference when email is cleared
-        receiveEmail = false
-      } else {
-        const normalized = normalizeEmail(input.email)
-        if (!isValidEmailFormat(normalized)) {
-          throw new ProfileValidationError('Email không đúng định dạng.')
-        }
-        validatedEmail = normalized
-      }
+    if (attachmentId !== null) {
+      await this.assertUsableAvatar(attachmentId)
     }
 
-    // Default flag to false if uninitialized or when email is absent
-    const finalReceiveEmail = validatedEmail ? Boolean(receiveEmail) : false
-
-    const updated: DbMember = {
-      ...member,
-      email: validatedEmail,
-      receiveEmailNotifications: finalReceiveEmail,
-      updatedAt: new Date(),
-    }
-
+    const updated: DbMember = { ...member, avatarAttachmentId: attachmentId ?? undefined, updatedAt: new Date() }
     await this.memberRepo.save(updated)
     return updated
+  }
+
+  private async assertUsableAvatar(attachmentId: string): Promise<void> {
+    if (!this.attachmentStorage) {
+      throw new Error('Attachment storage is not configured for avatar updates.')
+    }
+    const stored = await this.attachmentStorage.find(attachmentId)
+    if (!stored) {
+      throw new ProfileValidationError('Ảnh đại diện không tồn tại. Vui lòng tải ảnh lên lại.')
+    }
+    if (!AVATAR_MIME_TYPES.includes(stored.mimeType)) {
+      throw new ProfileValidationError('Ảnh đại diện phải là tệp PNG, JPEG, WebP hoặc GIF.')
+    }
+    if (stored.sizeBytes > MAX_AVATAR_BYTES) {
+      throw new ProfileValidationError('Ảnh đại diện không được vượt quá 2 MB.')
+    }
   }
 
   async changePassword(userId: string, currentPasswordRaw: string, newPasswordRaw: string): Promise<void> {
@@ -343,7 +340,6 @@ export class AuthService {
       passwordHash,
       requiresPasswordChange: false,
       email,
-      receiveEmailNotifications: true,
       isVerified: false,
       otp,
       createdAt: existingUser?.createdAt ?? new Date(),

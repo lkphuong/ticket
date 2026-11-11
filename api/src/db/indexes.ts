@@ -21,6 +21,12 @@ export async function ensureMongoIndexes(db: Db): Promise<string[]> {
   await memberColl.createIndex({ name: 1 })
   created.push('indexes:members')
 
+  // Transfer requests are looked up by requester and by the department that must approve them
+  const transferColl = db.collection(COLLECTION_NAMES.DEPARTMENT_TRANSFERS)
+  await transferColl.createIndex({ memberId: 1, requestedAt: -1 })
+  await transferColl.createIndex({ fromDepartment: 1, status: 1 })
+  created.push('indexes:department_transfers')
+
   // Tickets collection indexes supporting high-throughput filtering, search, and visibility boundaries
   const ticketColl = db.collection(COLLECTION_NAMES.TICKETS)
   await ticketColl.createIndex({ code: 1 }, { unique: true })

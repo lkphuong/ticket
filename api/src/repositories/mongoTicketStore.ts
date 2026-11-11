@@ -7,6 +7,7 @@ import {
   type AuditLogDocument,
   type DefaultSlaDocument,
   type DepartmentDocument,
+  type DepartmentTransferDocument,
   type DeviceTokenDocument,
   type MemberDocument,
   type NotificationDocument,
@@ -20,6 +21,7 @@ import { buildTicketFilter, buildTicketSortStages } from './ticketQueryBuilder.t
 import type {
   DbAuditLog,
   DbDefaultSla,
+  DbDepartmentTransfer,
   DbDeviceToken,
   DbMember,
   DbNotification,
@@ -27,6 +29,7 @@ import type {
   DepartmentWithPrefix,
   IAuditLogRepository,
   IDepartmentRepository,
+  IDepartmentTransferRepository,
   IDeviceTokenRepository,
   IMemberRepository,
   INotificationRepository,
@@ -362,7 +365,7 @@ export class MongoMemberRepository implements IMemberRepository {
       passwordHash: member.passwordHash,
       requiresPasswordChange: member.requiresPasswordChange,
       email: member.email?.trim().toLowerCase() ?? null,
-      receiveEmailNotifications: member.receiveEmailNotifications,
+      avatarAttachmentId: member.avatarAttachmentId ?? null,
       isVerified: member.isVerified,
       otp: member.otp ? this.mapOtpToDocument(member.otp) : null,
       createdAt: member.createdAt ?? new Date(),
@@ -395,7 +398,7 @@ export class MongoMemberRepository implements IMemberRepository {
       passwordHash: doc.passwordHash,
       requiresPasswordChange: doc.requiresPasswordChange,
       email: doc.email ?? undefined,
-      receiveEmailNotifications: doc.receiveEmailNotifications,
+      avatarAttachmentId: doc.avatarAttachmentId ?? undefined,
       isVerified: doc.isVerified,
       otp: doc.otp ? this.mapDocumentToOtp(doc.otp) : undefined,
       createdAt: doc.createdAt ? new Date(doc.createdAt) : undefined,
@@ -739,6 +742,68 @@ export class MongoDeviceTokenRepository implements IDeviceTokenRepository {
   }
 }
 
+// MongoDB repository implementing department transfer requests
+export class MongoDepartmentTransferRepository implements IDepartmentTransferRepository {
+  private readonly collection: Collection<DepartmentTransferDocument>
+
+  constructor(db: Db) {
+    this.collection = db.collection<DepartmentTransferDocument>(COLLECTION_NAMES.DEPARTMENT_TRANSFERS)
+  }
+
+  async findById(id: string): Promise<DbDepartmentTransfer | null> {
+    const doc = await this.collection.findOne({ _id: id })
+    return doc ? this.mapDocumentToTransfer(doc) : null
+  }
+
+  async findLatestByMember(memberId: string): Promise<DbDepartmentTransfer | null> {
+    const doc = await this.collection.findOne({ memberId }, { sort: { requestedAt: -1 } })
+    return doc ? this.mapDocumentToTransfer(doc) : null
+  }
+
+  async findPendingByMember(memberId: string): Promise<DbDepartmentTransfer | null> {
+    const doc = await this.collection.findOne({ memberId, status: 'pending' })
+    return doc ? this.mapDocumentToTransfer(doc) : null
+  }
+
+  async findPendingByFromDepartment(department: string): Promise<DbDepartmentTransfer[]> {
+    const docs = await this.collection.find({ fromDepartment: department, status: 'pending' }).sort({ requestedAt: 1 }).toArray()
+    return docs.map((doc) => this.mapDocumentToTransfer(doc))
+  }
+
+  async save(transfer: DbDepartmentTransfer): Promise<void> {
+    const doc: DepartmentTransferDocument = {
+      _id: transfer.id,
+      memberId: transfer.memberId,
+      username: transfer.username,
+      memberName: transfer.memberName,
+      fromDepartment: transfer.fromDepartment,
+      toDepartment: transfer.toDepartment,
+      status: transfer.status,
+      requestedAt: transfer.requestedAt,
+      decidedAt: transfer.decidedAt ?? null,
+      decidedByUsername: transfer.decidedByUsername ?? null,
+      rejectReason: transfer.rejectReason ?? null,
+    }
+    await this.collection.replaceOne({ _id: transfer.id }, doc, { upsert: true })
+  }
+
+  private mapDocumentToTransfer(doc: DepartmentTransferDocument): DbDepartmentTransfer {
+    return {
+      id: doc._id,
+      memberId: doc.memberId,
+      username: doc.username,
+      memberName: doc.memberName,
+      fromDepartment: doc.fromDepartment,
+      toDepartment: doc.toDepartment,
+      status: doc.status,
+      requestedAt: new Date(doc.requestedAt),
+      decidedAt: doc.decidedAt ? new Date(doc.decidedAt) : undefined,
+      decidedByUsername: doc.decidedByUsername ?? undefined,
+      rejectReason: doc.rejectReason ?? undefined,
+    }
+  }
+}
+
 // Unified MongoDB store facade implementing ITicketStore
 // Optional fields are omitted rather than stored as null so legacy name-only attachments round-trip unchanged
 function toEmbeddedAttachment(a: TicketAttachment): TicketEmbeddedAttachment {
@@ -758,6 +823,7 @@ export class MongoTicketStore implements ITicketStore {
   readonly notifications: MongoNotificationRepository
   readonly auditLogs: MongoAuditLogRepository
   readonly deviceTokens: MongoDeviceTokenRepository
+  readonly departmentTransfers: MongoDepartmentTransferRepository
 
   constructor(db: Db) {
     this.tickets = new MongoTicketRepository(db)
@@ -768,5 +834,6 @@ export class MongoTicketStore implements ITicketStore {
     this.notifications = new MongoNotificationRepository(db)
     this.auditLogs = new MongoAuditLogRepository(db)
     this.deviceTokens = new MongoDeviceTokenRepository(db)
+    this.departmentTransfers = new MongoDepartmentTransferRepository(db)
   }
 }

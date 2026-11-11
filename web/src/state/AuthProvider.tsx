@@ -24,6 +24,7 @@ function toViewer(user: UserSessionProfile): Viewer {
     isAdmin: user.role === 'admin',
     isExecutive: user.role === 'admin',
     requiresPasswordChange: user.requiresPasswordChange,
+    avatarAttachmentId: user.avatarAttachmentId,
   }
 }
 
@@ -87,6 +88,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [])
 
+  const refreshViewer = useCallback(async (): Promise<void> => {
+    const res = await apiClient.auth.me()
+    setViewer(toViewer(res.user))
+  }, [])
+
+  const updateAvatar = useCallback(async (avatarAttachmentId: string | null): Promise<void> => {
+    const res = await apiClient.auth.updateAvatar(avatarAttachmentId)
+    setViewer(toViewer(res.user))
+  }, [])
+
   const changePassword = useCallback(async (currentPassword: string, newPassword: string): Promise<string | null> => {
     try {
       await apiClient.auth.changePassword(currentPassword, newPassword)
@@ -101,8 +112,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ viewer, isLoading, sessionExpired, login, logout, changePassword }),
-    [viewer, isLoading, sessionExpired, login, logout, changePassword],
+    () => ({ viewer, isLoading, sessionExpired, login, logout, refreshViewer, updateAvatar, changePassword }),
+    [viewer, isLoading, sessionExpired, login, logout, refreshViewer, updateAvatar, changePassword],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

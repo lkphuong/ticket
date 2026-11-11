@@ -26,7 +26,6 @@ export async function seedAdminOnly(store: ITicketStore, initialPassword: string
       isActive: true,
       passwordHash: await Bun.password.hash(initialPassword, { algorithm: 'bcrypt', cost: 10 }),
       requiresPasswordChange: true,
-      receiveEmailNotifications: false,
       isVerified: true,
     })
   }

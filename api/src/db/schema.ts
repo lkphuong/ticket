@@ -10,6 +10,7 @@ export const COLLECTION_NAMES = {
   AUDIT_LOGS: 'audit_logs',
   DEVICE_TOKENS: 'device_tokens',
   SESSIONS: 'sessions',
+  DEPARTMENT_TRANSFERS: 'department_transfers',
 } as const
 
 export type CollectionName = (typeof COLLECTION_NAMES)[keyof typeof COLLECTION_NAMES]
@@ -42,7 +43,7 @@ export interface MemberDocument {
   passwordHash: string
   requiresPasswordChange: boolean
   email?: string | null
-  receiveEmailNotifications: boolean
+  avatarAttachmentId?: string | null
   isVerified?: boolean
   otp?: MemberOtpDocument | null
   createdAt: Date
@@ -208,7 +209,7 @@ export const COLLECTION_VALIDATORS: Record<string, Record<string, unknown>> = {
         passwordHash: { bsonType: 'string' },
         requiresPasswordChange: { bsonType: 'bool' },
         email: { bsonType: ['string', 'null'] },
-        receiveEmailNotifications: { bsonType: 'bool' },
+        avatarAttachmentId: { bsonType: ['string', 'null'] },
       },
     },
   },
@@ -246,4 +247,19 @@ export interface SessionDocument {
   isDepartmentHead: boolean
   requiresPasswordChange: boolean
   expiresAt: Date
+}
+
+// Department transfer request awaiting or carrying the decision of the releasing department head
+export interface DepartmentTransferDocument {
+  _id: string
+  memberId: string
+  username: string
+  memberName: string
+  fromDepartment: string
+  toDepartment: string
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled'
+  requestedAt: Date
+  decidedAt?: Date | null
+  decidedByUsername?: string | null
+  rejectReason?: string | null
 }

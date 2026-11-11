@@ -51,8 +51,14 @@ export function createAuthMiddleware(sessionService: ISessionService, memberRepo
       return
     }
 
-    // Attach verified viewer and token to context
-    req.viewer = session
+    // Attach verified viewer and token to context; organisational fields come from the member so a transfer applies at once
+    req.viewer = {
+      ...session,
+      name: member.name,
+      department: member.department,
+      role: member.role,
+      isDepartmentHead: member.isDepartmentHead,
+    }
     req.sessionToken = token
 
     // The member record is the source of truth: the session snapshot goes stale once the password is changed

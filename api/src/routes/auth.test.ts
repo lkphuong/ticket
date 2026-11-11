@@ -533,17 +533,4 @@ describe('Authentication & Session Management', () => {
     const deptRes3 = await request(app).get('/api/auth/departments')
     expect(deptRes3.body.occupiedDepartmentHeads['Chăm sóc khách hàng']).toBe('Quản Lý Chính Thức')
   })
-
-  it('should_store_profile_email_lowercase_without_domain_restriction_when_updating_profile', async () => {
-    const { app } = await setupApp()
-    const login = await request(app).post('/api/auth/login').send({ username: 'minhanh', password: 'ticket123' })
-
-    const res = await request(app)
-      .patch('/api/auth/profile')
-      .set('Authorization', `Bearer ${login.body.token}`)
-      .send({ email: ' Minh.Anh@Corp-Mail.VN ', receiveEmailNotifications: true })
-
-    expect(res.status).toBe(200)
-    expect(res.body.user.email).toBe('minh.anh@corp-mail.vn')
-  })
 })

@@ -64,6 +64,10 @@ _Avoid_: Master data
 Khuôn nhập sẵn của một phòng tiếp nhận để người gửi khởi tạo Ticket nhanh và đủ thông tin.
 _Avoid_: Template (trong lời nói)
 
+**Luân chuyển**:
+Việc Nhân viên chuyển sang phòng ban khác. Nhân viên gửi yêu cầu, chỉ có hiệu lực khi Trưởng phòng của phòng hiện tại xác nhận; Nhân viên đang phụ trách Ticket chưa xử lý xong thì chưa được duyệt luân chuyển.
+_Avoid_: Chuyển phòng, Transfer
+
 **Thông báo**:
 Bản ghi báo cho một người dùng về một sự kiện của Ticket liên quan. Có thể đẩy ra ngoài ứng dụng qua Firebase.
 _Avoid_: Notification, alert

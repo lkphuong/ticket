@@ -1,40 +1,50 @@
-// In-app notification bell with real-time unread counter, dropdown feed, and optional push registration
+// In-app notification bell with real-time unread counter, dropdown feed, and foreground push delivery
 
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '../../lib/apiClient.ts'
 import type { AppNotification } from '../../lib/apiClient.ts'
-import { isPushAvailable, requestPushToken, subscribeToForegroundPush } from '../../lib/firebaseMessaging.ts'
+import { subscribeToForegroundPush } from '../../lib/firebaseMessaging.ts'
 import { formatDateTime } from '../../lib/formatDate.ts'
 import { useToast } from '../../lib/toastContext.ts'
+import type { PushNotificationControls } from '../../lib/usePushNotifications.ts'
+import { useAuth } from '../../state/useAuth.ts'
 import { Button } from '../ui/Button.tsx'
 import { Icon } from '../ui/Icon.tsx'
 
-export function NotificationBell() {
+const TRANSFER_APPROVED_TYPE = 'department_transfer_approved'
+const NOTIFICATION_POLL_INTERVAL_MS = 15000
+const HOME_PATH = '/'
+
+interface NotificationBellProps {
+  push: PushNotificationControls
+}
+
+export function NotificationBell({ push }: NotificationBellProps) {
   const navigate = useNavigate()
   const { notify } = useToast()
+  const { refreshViewer } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
-  const [pushSupported, setPushSupported] = useState(false)
-  const [pushPermission, setPushPermission] = useState<NotificationPermission>(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      return Notification.permission
-    }
-    return 'default'
-  })
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Synchronizes notification feed and unread counter from the server
   useEffect(() => {
     let active = true
+    // Ids already seen, so only a transfer approval that arrives while the app is open refreshes the profile
+    const seenIds = new Set<string>()
+    const pollState = { isFirstPoll: true }
     const poll = async () => {
       try {
         const res = await apiClient.notifications.list()
-        if (active) {
-          setNotifications(res.notifications)
-          setUnreadCount(res.unreadCount)
-        }
+        if (!active) return
+        const hasNewApproval = res.notifications.some((item) => item.type === TRANSFER_APPROVED_TYPE && !seenIds.has(item.id))
+        res.notifications.forEach((item) => seenIds.add(item.id))
+        setNotifications(res.notifications)
+        setUnreadCount(res.unreadCount)
+        if (hasNewApproval && !pollState.isFirstPoll) await refreshViewer()
+        pollState.isFirstPoll = false
       } catch {
         // Retain existing state on transient communication failure
       }
@@ -44,43 +54,25 @@ export function NotificationBell() {
     // Poll notifications periodically to reflect incoming alerts
     const timer = setInterval(() => {
       void poll()
-    }, 15000)
+    }, NOTIFICATION_POLL_INTERVAL_MS)
 
     return () => {
       active = false
       clearInterval(timer)
     }
-  }, [])
+  }, [refreshViewer])
 
-  // Detects push support, refreshes the device token when already permitted, and surfaces pushes received while the tab is open
+  // Surfaces pushes received while the tab is open and refreshes the feed
   useEffect(() => {
-    let active = true
-    const subscriptions: Array<() => void> = []
-    void isPushAvailable().then(async (available) => {
-      if (!active || !available) return
-      setPushSupported(true)
-      if (Notification.permission !== 'granted') return
-      try {
-        await apiClient.notifications.registerDevice(await requestPushToken())
-        const unsubscribe = subscribeToForegroundPush((message) => {
-          notify(`${message.title}: ${message.body}`, 'info')
-          void apiClient.notifications.list().then((res) => {
-            setNotifications(res.notifications)
-            setUnreadCount(res.unreadCount)
-          })
-        })
-        // The component may have unmounted while the token request was pending
-        if (active) subscriptions.push(unsubscribe)
-        else unsubscribe()
-      } catch {
-        // Push stays optional; the polled feed keeps working
-      }
+    if (!push.isEnabled) return
+    return subscribeToForegroundPush((message) => {
+      notify(`${message.title}: ${message.body}`, 'info')
+      void apiClient.notifications.list().then((res) => {
+        setNotifications(res.notifications)
+        setUnreadCount(res.unreadCount)
+      })
     })
-    return () => {
-      active = false
-      subscriptions.forEach((unsubscribe) => unsubscribe())
-    }
-  }, [notify])
+  }, [push.isEnabled, notify])
 
   // Dismisses popover when clicking outside the panel container
   useEffect(() => {
@@ -121,23 +113,8 @@ export function NotificationBell() {
     setIsOpen(false)
     if (item.ticketId) {
       navigate(`/tickets/${item.ticketId}`)
-    }
-  }
-
-  async function handleRequestPushPermission() {
-    if (!pushSupported) return
-    try {
-      const permission = await Notification.requestPermission()
-      setPushPermission(permission)
-
-      if (permission === 'granted') {
-        await apiClient.notifications.registerDevice(await requestPushToken())
-        notify('Đã kích hoạt thông báo đẩy trên trình duyệt thành công.', 'success')
-      } else if (permission === 'denied') {
-        notify('Bạn đã từ chối quyền thông báo đẩy. Bạn vẫn có thể xem danh sách thông báo tại đây.', 'info')
-      }
-    } catch {
-      notify('Không thể đăng ký thông báo đẩy trình duyệt.', 'error')
+    } else if (item.type.startsWith('department_transfer')) {
+      navigate(HOME_PATH)
     }
   }
 
@@ -180,13 +157,14 @@ export function NotificationBell() {
             )}
           </div>
 
-          {pushSupported && pushPermission === 'default' && (
+          {push.isSupported && push.permission === 'default' && (
             <div className="border-b border-line bg-canvas p-3">
               <p className="text-xs text-ink-muted">Nhận thông báo tức thì khi có yêu cầu mới hoặc cập nhật trạng thái.</p>
               <Button
                 variant="secondary"
                 className="mt-2 w-full justify-center text-xs py-1"
-                onClick={handleRequestPushPermission}
+                disabled={push.isBusy}
+                onClick={() => void push.enable()}
               >
                 Bật thông báo đẩy trình duyệt
               </Button>

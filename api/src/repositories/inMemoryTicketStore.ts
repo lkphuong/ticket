@@ -3,6 +3,7 @@ import type { Ticket } from '@vtdesk/domain'
 import type {
   DbAuditLog,
   DbDefaultSla,
+  DbDepartmentTransfer,
   DbDeviceToken,
   DbMember,
   DbNotification,
@@ -10,6 +11,7 @@ import type {
   DepartmentWithPrefix,
   IAuditLogRepository,
   IDepartmentRepository,
+  IDepartmentTransferRepository,
   IDeviceTokenRepository,
   IMemberRepository,
   INotificationRepository,
@@ -344,6 +346,38 @@ export class InMemoryDeviceTokenRepository implements IDeviceTokenRepository {
   }
 }
 
+// In-memory implementation of department transfer requests
+export class InMemoryDepartmentTransferRepository implements IDepartmentTransferRepository {
+  private readonly items = new Map<string, DbDepartmentTransfer>()
+
+  async findById(id: string): Promise<DbDepartmentTransfer | null> {
+    const found = this.items.get(id)
+    return found ? { ...found } : null
+  }
+
+  async findLatestByMember(memberId: string): Promise<DbDepartmentTransfer | null> {
+    const requests = [...this.items.values()].filter((item) => item.memberId === memberId)
+    requests.sort((a, b) => b.requestedAt.getTime() - a.requestedAt.getTime())
+    return requests[0] ? { ...requests[0] } : null
+  }
+
+  async findPendingByMember(memberId: string): Promise<DbDepartmentTransfer | null> {
+    const found = [...this.items.values()].find((item) => item.memberId === memberId && item.status === 'pending')
+    return found ? { ...found } : null
+  }
+
+  async findPendingByFromDepartment(department: string): Promise<DbDepartmentTransfer[]> {
+    return [...this.items.values()]
+      .filter((item) => item.fromDepartment === department && item.status === 'pending')
+      .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
+      .map((item) => ({ ...item }))
+  }
+
+  async save(transfer: DbDepartmentTransfer): Promise<void> {
+    this.items.set(transfer.id, { ...transfer })
+  }
+}
+
 // Unified in-memory ticket store
 export class InMemoryTicketStore implements ITicketStore {
   readonly tickets = new InMemoryTicketRepository()
@@ -356,6 +390,7 @@ export class InMemoryTicketStore implements ITicketStore {
   readonly notifications = new InMemoryNotificationRepository()
   readonly auditLogs = new InMemoryAuditLogRepository()
   readonly deviceTokens = new InMemoryDeviceTokenRepository()
+  readonly departmentTransfers = new InMemoryDepartmentTransferRepository()
 
   private async cascadeDepartmentRename(currentName: string, nextName: string): Promise<void> {
     for (const member of await this.members.findAll()) {

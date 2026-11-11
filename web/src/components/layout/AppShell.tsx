@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { buildInbox } from '../../lib/ticketInbox.ts'
+import { usePushNotifications } from '../../lib/usePushNotifications.ts'
 import { ROLE_LABELS, ROLE_STRIPE_CLASSES, getViewerRole } from '../../lib/viewerRole.ts'
 import { useAuth } from '../../state/useAuth.ts'
 import { useTickets } from '../../state/useTickets.ts'
@@ -58,7 +59,7 @@ function ViewerSummary({ onOpenSettings }: { onOpenSettings: () => void }) {
     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
       <div className="flex items-center gap-2">
         <span className="flex items-center gap-1.5 text-xs font-semibold text-ink">
-          <Avatar department={viewer.department} sizeClass="size-6" />
+          <Avatar department={viewer.department} sizeClass="size-6" attachmentId={viewer.avatarAttachmentId} />
           {viewer.name}
           <span className="text-ink-muted font-normal">
             ({ROLE_LABELS[role]} · {viewer.department})
@@ -83,6 +84,7 @@ export function AppShell() {
   const { tickets, viewer } = useTickets()
   const { pathname } = useLocation()
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const push = usePushNotifications()
   const waitingCount = buildInbox(tickets, viewer).reduce((sum, group) => sum + group.tickets.length, 0)
   const role = getViewerRole(viewer)
 
@@ -102,7 +104,7 @@ export function AppShell() {
             <div className="hidden md:block">
               <ViewerSummary onOpenSettings={() => setIsSettingsOpen(true)} />
             </div>
-            <NotificationBell />
+            <NotificationBell push={push} />
           </div>
         </div>
         <div className="mx-auto max-w-6xl px-4 md:px-8">
@@ -139,7 +141,7 @@ export function AppShell() {
         <Outlet />
       </main>
 
-      <ProfileSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <ProfileSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} push={push} />
     </div>
   )
 }

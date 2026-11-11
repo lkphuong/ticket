@@ -214,33 +214,13 @@ describe('CMS and notifications contract tests against API', () => {
     expect(registerRes.body.message).toContain('Device token registered successfully')
   })
 
-  it('should_update_user_email_and_enforce_email_format_validation', async () => {
+  it('should_reject_avatar_update_when_attachment_does_not_exist', async () => {
     const { app, staffToken } = await setup()
 
-    // 1. Initial profile should have default email notifications flag as false
-    const meRes = await request(app)
-      .get('/api/auth/me')
-      .set('Authorization', `Bearer ${staffToken}`)
-    expect(meRes.status).toBe(200)
-    expect(meRes.body.user.receiveEmailNotifications).toBe(false)
-
-    // 2. Reject invalid email format with 400 Bad Request
-    const invalidEmailRes = await request(app)
+    const res = await request(app)
       .patch('/api/auth/profile')
       .set('Authorization', `Bearer ${staffToken}`)
-      .send({ email: 'invalid-email-format-without-at' })
-    expect(invalidEmailRes.status).toBe(400)
-
-    // 3. Accept valid email format and update notification preference
-    const validEmailRes = await request(app)
-      .patch('/api/auth/profile')
-      .set('Authorization', `Bearer ${staffToken}`)
-      .send({
-        email: 'staff.minhanh@vinatrans.com.vn',
-        receiveEmailNotifications: true,
-      })
-    expect(validEmailRes.status).toBe(200)
-    expect(validEmailRes.body.user.email).toBe('staff.minhanh@vinatrans.com.vn')
-    expect(validEmailRes.body.user.receiveEmailNotifications).toBe(true)
+      .send({ avatarAttachmentId: '202611_00000000-0000-4000-8000-000000000000' })
+    expect(res.status).toBe(400)
   })
 })

@@ -1,7 +1,7 @@
 import type { Ticket } from '@vtdesk/domain'
 import type { DbNotification, ITicketStore } from '../repositories/interfaces.ts'
 import { collectDirectoryKeys, resolveRecipients } from './notificationRecipients.ts'
-import type { MemberDirectory } from './notificationRecipients.ts'
+import type { MemberDirectory, RecipientDraft } from './notificationRecipients.ts'
 import type { IPushGateway } from './pushGateway.ts'
 
 export interface INotificationChannel {
@@ -120,26 +120,56 @@ export class NotificationService {
           }),
         ),
       )
-      if (notifications.length === 0) return
-
-      await this.store.notifications.saveMany(notifications)
-      await this.pushToDevices(notifications)
-
-      for (const item of notifications) {
-        // Channel failure must not abort persistence
-        this.channel.send(item).catch((err) => {
-          console.error(`[NotificationChannel] Failed to deliver push notification: ${err.message}`, {
-            notificationId: item.id,
-            recipient: item.recipientUsername,
-          })
-        })
-      }
+      await this.deliver(notifications)
     } catch (err: unknown) {
       // Isolate notifications failure to preserve business transactional integrity
       console.error(
         `[NotificationService] Unexpected error while dispatching notification: ${err instanceof Error ? err.message : String(err)}`,
         { eventTypes: [...new Set(events.map((event) => event.type))], eventCount: events.length },
       )
+    }
+  }
+
+  // Notifies members about an event that is not tied to a ticket, such as a department transfer decision
+  async notifyMembers(type: string, recipients: readonly RecipientDraft[]): Promise<void> {
+    if (recipients.length === 0) return
+    try {
+      const timestamp = this.clock().toISOString()
+      await this.deliver(
+        recipients.map(
+          (target): DbNotification => ({
+            id: crypto.randomUUID(),
+            recipientUsername: target.username,
+            type,
+            title: target.title,
+            body: target.body,
+            isRead: false,
+            createdAt: timestamp,
+          }),
+        ),
+      )
+    } catch (err: unknown) {
+      console.error(
+        `[NotificationService] Unexpected error while notifying members: ${err instanceof Error ? err.message : String(err)}`,
+        { type, recipientCount: recipients.length },
+      )
+    }
+  }
+
+  // Persists notifications, pushes them to devices and hands them to the external channel
+  private async deliver(notifications: readonly DbNotification[]): Promise<void> {
+    if (notifications.length === 0) return
+    await this.store.notifications.saveMany(notifications)
+    await this.pushToDevices(notifications)
+
+    for (const item of notifications) {
+      // Channel failure must not abort persistence
+      this.channel.send(item).catch((err) => {
+        console.error(`[NotificationChannel] Failed to deliver push notification: ${err.message}`, {
+          notificationId: item.id,
+          recipient: item.recipientUsername,
+        })
+      })
     }
   }
 
